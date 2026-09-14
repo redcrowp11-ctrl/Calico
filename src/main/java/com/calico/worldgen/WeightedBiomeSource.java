@@ -1,0 +1,150 @@
+package com.calico.worldgen;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
+
+import com.calico.Calico;
+import com.calico.config.CalicoConfigValidation;
+import com.calico.config.CalicoWorldGenConfig;
+import com.calico.config.SelectedBiomeEntry;
+import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderGetter;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.biome.Climate;
+
+/**
+ * Weighted multi-biome {@link BiomeSource}.
+ * <ul>
+ *   <li>Any subset of biomes with per-biome weights</li>
+ *   <li>Deterministic from world {@code seed} + quart-position hash</li>
+ *   <li>Single biome ⇒ always that biome (100%)</li>
+ * </ul>
+ */
+public class WeightedBiomeSource extends BiomeSource {
+    public static final MapCodec<WeightedBiomeSource> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+            com.mojang.serialization.Codec.LONG.fieldOf("seed").forGetter(WeightedBiomeSource::seed),
+            WeightedBiomeEntry.CODEC.listOf().fieldOf("biomes").forGetter(WeightedBiomeSource::entries)
+    ).apply(instance, WeightedBiomeSource::new));
+
+    private final long seed;
+    private final List<WeightedBiomeEntry> entries;
+    private final double totalWeight;
+    private final Holder<Biome>[] biomes;
+    private final double[] cumulative;
+
+    @SuppressWarnings("unchecked")
+    public WeightedBiomeSource(long seed, List<WeightedBiomeEntry> entries) {
+        this.seed = seed;
+        List<WeightedBiomeEntry> cleaned = new ArrayList<>();
+        for (WeightedBiomeEntry e : entries) {
+            if (e != null && e.biome() != null && e.weight() > 0.0d) {
+                cleaned.add(e);
+            }
+        }
+        if (cleaned.isEmpty()) {
+            throw new IllegalArgumentException("WeightedBiomeSource requires at least one biome with weight > 0");
+        }
+        this.entries = List.copyOf(cleaned);
+        this.biomes = new Holder[cleaned.size()];
+        this.cumulative = new double[cleaned.size()];
+        double sum = 0.0d;
+        for (int i = 0; i < cleaned.size(); i++) {
+            WeightedBiomeEntry e = cleaned.get(i);
+            this.biomes[i] = e.biome();
+            sum += e.weight();
+            this.cumulative[i] = sum;
+        }
+        this.totalWeight = sum;
+    }
+
+    public long seed() {
+        return seed;
+    }
+
+    public List<WeightedBiomeEntry> entries() {
+        return entries;
+    }
+
+    /**
+     * Builds a source from validated Calico config. Soft-drops missing registry biomes with a log note.
+     *
+     * @throws IllegalArgumentException if no valid biomes remain
+     */
+    public static WeightedBiomeSource fromConfig(CalicoWorldGenConfig config, long worldSeed,
+            HolderGetter<Biome> biomes) {
+        CalicoConfigValidation.Result validation = CalicoConfigValidation.validateForCreate(config);
+        if (!validation.valid()) {
+            throw new IllegalArgumentException(validation.message());
+        }
+        CalicoWorldGenConfig sanitized = validation.sanitized();
+        List<WeightedBiomeEntry> resolved = new ArrayList<>();
+        for (SelectedBiomeEntry entry : sanitized.selectedBiomes()) {
+            ResourceLocation id = entry.resourceLocationOrNull();
+            if (id == null) {
+                Calico.LOGGER.warn("Calico: soft-dropping invalid biome id '{}'", entry.id());
+                continue;
+            }
+            ResourceKey<Biome> key = ResourceKey.create(Registries.BIOME, id);
+            var holder = biomes.get(key);
+            if (holder.isEmpty()) {
+                Calico.LOGGER.warn(
+                        "Calico: soft-dropping missing biome '{}' (not in registry / climate unavailable)",
+                        id);
+                continue;
+            }
+            resolved.add(new WeightedBiomeEntry(holder.get(), entry.weight()));
+        }
+        if (resolved.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Calico: no selected biomes resolved from the registry. " + CalicoConfigValidation.MSG_EMPTY);
+        }
+        if (resolved.size() == 1) {
+            Calico.LOGGER.debug("Calico: single-biome selection → 100% {}",
+                    resolved.getFirst().biome().unwrapKey().map(ResourceKey::location).orElse(null));
+        }
+        return new WeightedBiomeSource(worldSeed, resolved);
+    }
+
+    @Override
+    protected MapCodec<? extends BiomeSource> codec() {
+        return CODEC;
+    }
+
+    @Override
+    protected Stream<Holder<Biome>> collectPossibleBiomes() {
+        return Stream.of(biomes);
+    }
+
+    @Override
+    public Holder<Biome> getNoiseBiome(int quartX, int quartY, int quartZ, Climate.Sampler sampler) {
+        if (biomes.length == 1) {
+            return biomes[0];
+        }
+        // Deterministic pick from world seed + quart coords (Y ignored for horizontal biomes).
+        long hash = mixSeed(seed, quartX, quartZ);
+        double unit = ((hash >>> 1) & 0x1FFFFFFFFFFFFFL) / (double) 0x1FFFFFFFFFFFFFL;
+        double target = unit * totalWeight;
+        for (int i = 0; i < cumulative.length; i++) {
+            if (target < cumulative[i]) {
+                return biomes[i];
+            }
+        }
+        return biomes[biomes.length - 1];
+    }
+
+    /** Stable mix replacing deprecated {@code Mth.getSeed} for biome picking. */
+    private static long mixSeed(long worldSeed, int quartX, int quartZ) {
+        long h = worldSeed ^ ((long) quartX * 341873128712L) ^ ((long) quartZ * 132897987541L);
+        h = (h ^ (h >>> 30)) * 0xbf58476d1ce4e5b9L;
+        h = (h ^ (h >>> 27)) * 0x94d049bb133111ebL;
+        return h ^ (h >>> 31);
+    }
+}
