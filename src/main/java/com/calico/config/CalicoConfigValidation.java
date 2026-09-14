@@ -8,7 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * Shared validation API for UI + generation.
- * Empty list OR all weights ≤ 0 → invalid (block create).
+ * Empty list OR all weights ≤ 0 / non-finite (NaN, Inf) → invalid (block create).
  */
 public final class CalicoConfigValidation {
     public static final String MSG_EMPTY =
@@ -18,7 +18,7 @@ public final class CalicoConfigValidation {
     public static final String MSG_INVALID_ID =
             "Biome id must be a full resource location (modid:biome).";
     public static final String MSG_NON_POSITIVE_WEIGHT =
-            "Biome weight must be greater than 0 (non-positive weights are ignored).";
+            "Biome weight must be a finite number greater than 0 (non-positive / NaN / Inf weights are ignored).";
 
     private CalicoConfigValidation() {
     }
@@ -34,8 +34,8 @@ public final class CalicoConfigValidation {
     }
 
     /**
-     * Validates config for world creation. Soft-ignores non-positive weights with warnings.
-     * Blocks create when no positive-weight biomes remain.
+     * Validates config for world creation. Soft-ignores non-positive / non-finite weights with warnings.
+     * Blocks create when no positive finite-weight biomes remain.
      */
     public static Result validateForCreate(CalicoWorldGenConfig config) {
         Objects.requireNonNull(config, "config");
@@ -59,7 +59,7 @@ public final class CalicoConfigValidation {
                 warnings.add(MSG_INVALID_ID + " Got: " + entry.id());
                 continue;
             }
-            if (entry.weight() <= 0.0d) {
+            if (!Double.isFinite(entry.weight()) || entry.weight() <= 0.0d) {
                 warnings.add(MSG_NON_POSITIVE_WEIGHT + " id=" + entry.id() + " weight=" + entry.weight());
             }
         }

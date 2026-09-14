@@ -2,6 +2,7 @@ package com.calico.worldgen;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import com.calico.Calico;
@@ -45,7 +46,7 @@ public class WeightedBiomeSource extends BiomeSource {
         this.seed = seed;
         List<WeightedBiomeEntry> cleaned = new ArrayList<>();
         for (WeightedBiomeEntry e : entries) {
-            if (e != null && e.biome() != null && e.weight() > 0.0d) {
+            if (e != null && e.biome() != null && Double.isFinite(e.weight()) && e.weight() > 0.0d) {
                 cleaned.add(e);
             }
         }
@@ -74,15 +75,57 @@ public class WeightedBiomeSource extends BiomeSource {
     }
 
     /**
-     * Builds a source from validated Calico config. Soft-drops missing registry biomes with a log note.
+     * Builds a source from validated Calico config for the overworld dimension scope.
      *
      * @throws IllegalArgumentException if no valid biomes remain
      */
     public static WeightedBiomeSource fromConfig(CalicoWorldGenConfig config, long worldSeed,
             HolderGetter<Biome> biomes) {
+        return fromConfig(config, worldSeed, biomes, BiomeDimension.OVERWORLD);
+    }
+
+    /**
+     * Builds a source from validated Calico config, soft-dropping missing / wrong-dimension biomes.
+     *
+     * @param dimensionScope biomes that do not belong to this dimension are soft-dropped
+     * @throws IllegalArgumentException if no valid biomes remain
+     */
+    public static WeightedBiomeSource fromConfig(CalicoWorldGenConfig config, long worldSeed,
+            HolderGetter<Biome> biomes, BiomeDimension dimensionScope) {
+        List<WeightedBiomeEntry> resolved = resolveEntries(config, biomes, dimensionScope, true);
+        if (resolved.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Calico: no selected biomes resolved from the registry for " + dimensionScope + ". "
+                            + CalicoConfigValidation.MSG_EMPTY);
+        }
+        if (resolved.size() == 1) {
+            Calico.LOGGER.debug("Calico: single-biome selection → 100% {}",
+                    resolved.getFirst().biome().unwrapKey().map(ResourceKey::location).orElse(null));
+        }
+        return new WeightedBiomeSource(worldSeed, resolved);
+    }
+
+    /**
+     * Resolves config entries to weighted holders for {@code dimensionScope}.
+     * Soft-drops invalid ids, missing registry entries, and wrong-dimension biomes.
+     * Returns empty list when nothing remains (does not throw).
+     */
+    public static List<WeightedBiomeEntry> resolveEntries(CalicoWorldGenConfig config,
+            HolderGetter<Biome> biomes, BiomeDimension dimensionScope) {
+        return resolveEntries(config, biomes, dimensionScope, false);
+    }
+
+    /**
+     * @param failOnInvalidConfig when true, throws if config fails create validation
+     */
+    public static List<WeightedBiomeEntry> resolveEntries(CalicoWorldGenConfig config,
+            HolderGetter<Biome> biomes, BiomeDimension dimensionScope, boolean failOnInvalidConfig) {
         CalicoConfigValidation.Result validation = CalicoConfigValidation.validateForCreate(config);
         if (!validation.valid()) {
-            throw new IllegalArgumentException(validation.message());
+            if (failOnInvalidConfig) {
+                throw new IllegalArgumentException(validation.message());
+            }
+            return List.of();
         }
         CalicoWorldGenConfig sanitized = validation.sanitized();
         List<WeightedBiomeEntry> resolved = new ArrayList<>();
@@ -93,24 +136,40 @@ public class WeightedBiomeSource extends BiomeSource {
                 continue;
             }
             ResourceKey<Biome> key = ResourceKey.create(Registries.BIOME, id);
-            var holder = biomes.get(key);
+            Optional<Holder.Reference<Biome>> holder = biomes.get(key);
             if (holder.isEmpty()) {
                 Calico.LOGGER.warn(
                         "Calico: soft-dropping missing biome '{}' (not in registry / climate unavailable)",
                         id);
                 continue;
             }
-            resolved.add(new WeightedBiomeEntry(holder.get(), entry.weight()));
+            Holder<Biome> biomeHolder = holder.get();
+            if (!BiomeRegistryDiscovery.matchesDimension(biomeHolder, dimensionScope)) {
+                BiomeDimension actual = BiomeRegistryDiscovery.classifyDimension(biomeHolder);
+                Calico.LOGGER.warn(
+                        "Calico: soft-dropping biome '{}' — dimension {} does not match scope {}",
+                        id, actual, dimensionScope);
+                continue;
+            }
+            if (!Double.isFinite(entry.weight()) || entry.weight() <= 0.0d) {
+                continue;
+            }
+            resolved.add(new WeightedBiomeEntry(biomeHolder, entry.weight()));
         }
+        return List.copyOf(resolved);
+    }
+
+    /**
+     * Like {@link #fromConfig} but returns empty when no biomes remain for the dimension
+     * (for optional Nether/End stems).
+     */
+    public static Optional<WeightedBiomeSource> tryFromConfig(CalicoWorldGenConfig config, long worldSeed,
+            HolderGetter<Biome> biomes, BiomeDimension dimensionScope) {
+        List<WeightedBiomeEntry> resolved = resolveEntries(config, biomes, dimensionScope);
         if (resolved.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Calico: no selected biomes resolved from the registry. " + CalicoConfigValidation.MSG_EMPTY);
+            return Optional.empty();
         }
-        if (resolved.size() == 1) {
-            Calico.LOGGER.debug("Calico: single-biome selection → 100% {}",
-                    resolved.getFirst().biome().unwrapKey().map(ResourceKey::location).orElse(null));
-        }
-        return new WeightedBiomeSource(worldSeed, resolved);
+        return Optional.of(new WeightedBiomeSource(worldSeed, resolved));
     }
 
     @Override

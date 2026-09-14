@@ -37,7 +37,7 @@ public record CalicoWorldGenConfig(int version, List<SelectedBiomeEntry> selecte
     }
 
     /**
-     * Returns a config with non-positive weights dropped and duplicate ids resolved (last wins).
+     * Returns a config with non-finite / non-positive weights dropped and duplicate ids resolved (last wins).
      * Does not validate emptiness — use {@link CalicoConfigValidation}.
      */
     public CalicoWorldGenConfig sanitized() {
@@ -46,7 +46,7 @@ public record CalicoWorldGenConfig(int version, List<SelectedBiomeEntry> selecte
             if (entry == null || entry.id() == null || entry.id().isBlank()) {
                 continue;
             }
-            if (entry.weight() <= 0.0d) {
+            if (!Double.isFinite(entry.weight()) || entry.weight() <= 0.0d) {
                 continue;
             }
             if (ResourceLocation.tryParse(entry.id()) == null) {
