@@ -73,5 +73,5 @@
   "calico.screen.create.terrain.mountainous.tooltip": "Coming soon — currently uses Normal terrain.",
   "calico.screen.create.terrain.cave.tooltip": "Coming soon — currently uses Normal terrain.",
   "calico.screen.create.terrain.wedding_cake.tooltip": "Stacked strata, organic continuous voids, occasional column connectors.",
-  "calico.screen.create.applied": "Calico applied: terrainStyle=%s (%s biomes)"
+  "calico.screen.create.applied": "terrainStyle=%s (%s biomes)"
 }

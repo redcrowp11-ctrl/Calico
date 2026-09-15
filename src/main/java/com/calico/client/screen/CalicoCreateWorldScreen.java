@@ -69,6 +69,8 @@ public class CalicoCreateWorldScreen extends Screen {
     private BiomeTileGridWidget grid;
     private EditBox searchBox;
     private Button createButton;
+    /** Terrain CycleButton — Done reads getValue() so label never desyncs from packed id. */
+    private CycleButton<TerrainStyle> terrainStyleButton;
     private Button resetWeightButton;
     private WeightSlider weightSlider;
     private Component statusMessage = Component.empty();
@@ -221,7 +223,9 @@ public class CalicoCreateWorldScreen extends Screen {
             scaleY = row2Y + BTN_H + GAP;
         }
 
-        addRenderableWidget(CycleButton.<TerrainStyle>builder(v -> Component.translatable(
+        // Locked emit ids via TerrainStyle.serializedName(): normal|sky_islands|islands|
+        // big_islands|mountainous|cave|wedding_cake — never "standard" (alias→normal on parse only).
+        this.terrainStyleButton = CycleButton.<TerrainStyle>builder(v -> Component.translatable(
                         switch (v) {
                             case NORMAL -> "calico.screen.create.terrain.normal";
                             case SKY_ISLANDS -> "calico.screen.create.terrain.sky_islands";
@@ -237,7 +241,8 @@ public class CalicoCreateWorldScreen extends Screen {
                         "calico.screen.create.terrain." + value.serializedName() + ".tooltip")))
                 .create(terrainX, row2Y, terrainW, BTN_H,
                         Component.translatable("calico.screen.create.terrain"),
-                        (btn, value) -> this.selection.setTerrainStyle(value)));
+                        (btn, value) -> this.selection.setTerrainStyle(value));
+        addRenderableWidget(this.terrainStyleButton);
 
         addRenderableWidget(CycleButton.<BiomeScale>builder(v -> Component.translatable(
                         switch (v) {
@@ -412,6 +417,10 @@ public class CalicoCreateWorldScreen extends Screen {
     }
 
     private void onCreate() {
+        // Force-sync CycleButton → selection before pack (prevents label≠value / stale default).
+        if (this.terrainStyleButton != null) {
+            this.selection.setTerrainStyle(this.terrainStyleButton.getValue());
+        }
         CalicoWorldGenConfig config = this.selection.toConfig();
         if (!CalicoWorldCreationBridge.submit(this.parent, config)) {
             this.gateMessage = Component.translatable("calico.screen.create.gate");
@@ -419,9 +428,8 @@ public class CalicoCreateWorldScreen extends Screen {
             return;
         }
         BiomeSelectionPersistence.save(this.minecraft, config);
-        String styleId = config.terrainStyle() == null
-                ? "normal"
-                : config.terrainStyle().serializedName();
+        // Locked snake_case id only (FunTabStub / serializedName) — never "standard".
+        String styleId = FunTabStub.terrainStyleId(config.terrainStyle());
         // Visible confirm on Create World so bake misses are easy to spot vs UI handoff.
         CalicoClient.showCreateConfirm(Component.translatable(
                 "calico.screen.create.applied",
