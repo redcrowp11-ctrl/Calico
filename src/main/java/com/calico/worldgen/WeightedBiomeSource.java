@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import com.calico.Calico;
+import com.calico.config.BiomeScale;
 import com.calico.config.CalicoConfigValidation;
 import com.calico.config.CalicoWorldGenConfig;
 import com.calico.config.SelectedBiomeEntry;
@@ -25,25 +26,41 @@ import net.minecraft.world.level.biome.Climate;
  * Weighted multi-biome {@link BiomeSource}.
  * <ul>
  *   <li>Any subset of biomes with per-biome weights</li>
- *   <li>Deterministic from world {@code seed} + quart-position hash</li>
+ *   <li>Deterministic from world {@code seed} + position</li>
  *   <li>Single biome ⇒ always that biome (100%)</li>
+ *   <li>{@link BiomeScale#NORMAL} — large contiguous Voronoi regions (vanilla-comparable)</li>
+ *   <li>{@link BiomeScale#QUILT} — per-quart hash → tight patchwork micro-biomes</li>
  * </ul>
  */
 public class WeightedBiomeSource extends BiomeSource {
+    /**
+     * Quart-space Voronoi cell size for {@link BiomeScale#NORMAL}.
+     * 128 quarte × 4 blocks = 512-block mean region scale (vanilla-comparable).
+     */
+    private static final int NORMAL_CELL_QUARTS = 128;
+
     public static final MapCodec<WeightedBiomeSource> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             com.mojang.serialization.Codec.LONG.fieldOf("seed").forGetter(WeightedBiomeSource::seed),
-            WeightedBiomeEntry.CODEC.listOf().fieldOf("biomes").forGetter(WeightedBiomeSource::entries)
+            WeightedBiomeEntry.CODEC.listOf().fieldOf("biomes").forGetter(WeightedBiomeSource::entries),
+            BiomeScale.CODEC.optionalFieldOf("biomeScale", BiomeScale.NORMAL).forGetter(WeightedBiomeSource::biomeScale)
     ).apply(instance, WeightedBiomeSource::new));
 
     private final long seed;
     private final List<WeightedBiomeEntry> entries;
+    private final BiomeScale biomeScale;
     private final double totalWeight;
     private final Holder<Biome>[] biomes;
     private final double[] cumulative;
 
-    @SuppressWarnings("unchecked")
+    /** Defaults to {@link BiomeScale#NORMAL}. */
     public WeightedBiomeSource(long seed, List<WeightedBiomeEntry> entries) {
+        this(seed, entries, BiomeScale.NORMAL);
+    }
+
+    @SuppressWarnings("unchecked")
+    public WeightedBiomeSource(long seed, List<WeightedBiomeEntry> entries, BiomeScale biomeScale) {
         this.seed = seed;
+        this.biomeScale = biomeScale == null ? BiomeScale.NORMAL : biomeScale;
         List<WeightedBiomeEntry> cleaned = new ArrayList<>();
         for (WeightedBiomeEntry e : entries) {
             if (e != null && e.biome() != null && Double.isFinite(e.weight()) && e.weight() > 0.0d) {
@@ -74,6 +91,10 @@ public class WeightedBiomeSource extends BiomeSource {
         return entries;
     }
 
+    public BiomeScale biomeScale() {
+        return biomeScale;
+    }
+
     /**
      * Builds a source from validated Calico config for the overworld dimension scope.
      *
@@ -102,7 +123,8 @@ public class WeightedBiomeSource extends BiomeSource {
             Calico.LOGGER.debug("Calico: single-biome selection → 100% {}",
                     resolved.getFirst().biome().unwrapKey().map(ResourceKey::location).orElse(null));
         }
-        return new WeightedBiomeSource(worldSeed, resolved);
+        BiomeScale scale = config.biomeScale() == null ? BiomeScale.NORMAL : config.biomeScale();
+        return new WeightedBiomeSource(worldSeed, resolved, scale);
     }
 
     /**
@@ -169,7 +191,8 @@ public class WeightedBiomeSource extends BiomeSource {
         if (resolved.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(new WeightedBiomeSource(worldSeed, resolved));
+        BiomeScale scale = config.biomeScale() == null ? BiomeScale.NORMAL : config.biomeScale();
+        return Optional.of(new WeightedBiomeSource(worldSeed, resolved, scale));
     }
 
     @Override
@@ -187,8 +210,52 @@ public class WeightedBiomeSource extends BiomeSource {
         if (biomes.length == 1) {
             return biomes[0];
         }
-        // Deterministic pick from world seed + quart coords (Y ignored for horizontal biomes).
-        long hash = mixSeed(seed, quartX, quartZ);
+        if (biomeScale.isQuilt()) {
+            // High-frequency: independent pick per quart → tight quilt / micro-biomes.
+            return pickFromHash(mixSeed(seed, quartX, quartZ));
+        }
+        // Normal: large Voronoi cells → contiguous vanilla-scale regions; weights ≈ area share.
+        return pickFromHash(voronoiCellHash(quartX, quartZ));
+    }
+
+    /**
+     * Nearest jittered Voronoi cell in quart space; returns a stable hash for that cell
+     * so the weighted biome pick is constant across the whole region.
+     */
+    private long voronoiCellHash(int quartX, int quartZ) {
+        final int cell = NORMAL_CELL_QUARTS;
+        int cellX = Math.floorDiv(quartX, cell);
+        int cellZ = Math.floorDiv(quartZ, cell);
+
+        double bestDist = Double.POSITIVE_INFINITY;
+        int bestCX = cellX;
+        int bestCZ = cellZ;
+
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                int cx = cellX + dx;
+                int cz = cellZ + dz;
+                long h = mixSeed(seed, cx, cz);
+                // Jitter center within the cell for organic (non-grid) borders.
+                double jx = ((h & 0xFFFFL) / 65535.0d) * cell;
+                double jz = (((h >>> 16) & 0xFFFFL) / 65535.0d) * cell;
+                double px = cx * (double) cell + jx;
+                double pz = cz * (double) cell + jz;
+                double ddx = quartX - px;
+                double ddz = quartZ - pz;
+                double dist = ddx * ddx + ddz * ddz;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestCX = cx;
+                    bestCZ = cz;
+                }
+            }
+        }
+        // Distinct mix from jitter seed so biome pick ≠ jitter entropy alone.
+        return mixSeed(seed ^ 0x9E3779B97F4A7C15L, bestCX, bestCZ);
+    }
+
+    private Holder<Biome> pickFromHash(long hash) {
         double unit = ((hash >>> 1) & 0x1FFFFFFFFFFFFFL) / (double) 0x1FFFFFFFFFFFFFL;
         double target = unit * totalWeight;
         for (int i = 0; i < cumulative.length; i++) {

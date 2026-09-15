@@ -14,6 +14,7 @@ import com.calico.client.data.BiomePresets;
 import com.calico.client.data.BiomeSelectionPersistence;
 import com.calico.client.data.BiomeSelectionState;
 import com.calico.client.data.BiomeTagClassifier;
+import com.calico.config.BiomeScale;
 import com.calico.config.CalicoConfigValidation;
 import com.calico.config.CalicoWorldGenConfig;
 import com.calico.fun.FunTabStub;
@@ -232,6 +233,10 @@ public class CalicoCreateWorldScreen extends Screen {
         addActionWrapped("calico.screen.create.qol.export", this::doExport);
         addActionWrapped("calico.screen.create.qol.import", this::doImport);
 
+        // Biome scale: Normal (default contiguous) vs Quilt (tight patchwork)
+        // DevBotAid binds the same field via FunTabStub.OPTION_BIOME_SCALE / config.biomeScale
+        addBiomeScaleCycleWrapped();
+
         // Raise contentTop enough for wrapped chrome
         this.contentTop = this.wrapY + WRAP_ROW_STEP + GAP;
 
@@ -332,6 +337,28 @@ public class CalicoCreateWorldScreen extends Screen {
             btn.setMessage(Component.literal("*").append(label));
         }
         addRenderableWidget(btn);
+    }
+
+
+    /** CycleButton for biomeScale — Normal (default) / Quilt. Hook for DevBotAid. */
+    private void addBiomeScaleCycleWrapped() {
+        Component label = Component.translatable("calico.screen.create.scale");
+        // Estimate width similar to other cycle buttons
+        int w = Math.max(sizedWidth(label) + 40, 120);
+        int x = placeWrapped(w);
+        addRenderableWidget(CycleButton.<BiomeScale>builder(v -> Component.translatable(
+                        switch (v) {
+                            case NORMAL -> "calico.screen.create.scale.normal";
+                            case QUILT -> "calico.screen.create.scale.quilt";
+                        }))
+                .withValues(BiomeScale.values())
+                .withInitialValue(this.selection.biomeScale())
+                .withTooltip(value -> Tooltip.create(Component.translatable(
+                        value.isQuilt()
+                                ? "calico.screen.create.scale.quilt.tooltip"
+                                : "calico.screen.create.scale.normal.tooltip")))
+                .create(x, this.wrapY, w, BTN_H, label,
+                        (btn, value) -> this.selection.setBiomeScale(value)));
     }
 
     private void addActionWrapped(String key, Runnable action) {
