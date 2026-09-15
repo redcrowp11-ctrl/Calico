@@ -1,5 +1,6 @@
 package com.calico.config;
 
+import com.calico.Calico;
 import com.mojang.serialization.Codec;
 
 /**
@@ -32,7 +33,8 @@ public enum TerrainStyle {
     }
 
     /**
-     * Parses a JSON string; unknown / blank / null → {@link #NORMAL}.
+     * Parses a JSON string; blank / null → {@link #NORMAL}.
+     * Known aliases map to locked values; unknown values log ERROR and fall back to {@link #NORMAL}.
      */
     public static TerrainStyle parseLenient(String raw) {
         if (raw == null || raw.isBlank()) {
@@ -44,8 +46,8 @@ public enum TerrainStyle {
                 return style;
             }
         }
-        // Aliases
-        if ("default".equals(key) || "overworld".equals(key)) {
+        // Aliases (legacy / UI typos → locked enum serialized names)
+        if ("standard".equals(key) || "default".equals(key) || "overworld".equals(key)) {
             return NORMAL;
         }
         if ("sky".equals(key)) {
@@ -54,6 +56,9 @@ public enum TerrainStyle {
         if ("wedding".equals(key)) {
             return WEDDING_CAKE;
         }
+        Calico.LOGGER.error(
+                "Calico: unknown terrainStyle=\"{}\" — falling back to normal (locked: normal, sky_islands, islands, big_islands, mountainous, cave, wedding_cake)",
+                raw);
         return NORMAL;
     }
 }

@@ -48,7 +48,7 @@ Aliases accepted leniently on parse: `vanilla`/`large`/`default` → normal; `ti
 | `mountainous` | **Fallback → normal** (logged) |
 | `cave` | **Fallback → normal** (logged) |
 
-Aliases accepted leniently on parse: `default`/`overworld` → normal; `sky` → sky_islands; `wedding` → wedding_cake.
+Aliases accepted leniently on parse: `standard`/`default`/`overworld` → normal; `sky` → sky_islands; `wedding` → wedding_cake. Unknown values log ERROR and fall back to normal.
 
 Default terrain when omitted = **normal** (current overworld). Terrain styles layer on top of `selectedBiomes`+weights and `biomeScale` (WeightedBiomeSource unchanged).
 
