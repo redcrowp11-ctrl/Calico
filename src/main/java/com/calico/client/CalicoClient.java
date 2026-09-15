@@ -1,16 +1,22 @@
 package com.calico.client;
 
-import java.util.Objects;
-
 import com.calico.Calico;
+import com.calico.client.data.BiomeSelectionPersistence;
 import com.calico.client.screen.CalicoCreateWorldScreen;
+import com.calico.config.CalicoConfigValidation;
 import com.calico.config.CalicoCreateTimeConfig;
 import com.calico.config.CalicoWorldGenConfig;
+import com.calico.config.TerrainStyle;
 import com.calico.worldgen.CalicoCreateWorldBridge;
 import com.calico.worldgen.CalicoWorldPresets;
+import com.calico.worldgen.WeightedBiomeSource;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.core.Holder;
+import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -31,8 +37,6 @@ import net.neoforged.neoforge.common.NeoForge;
 public class CalicoClient {
     /** Guard against recursive uiState listener updates when applying LevelStem. */
     private static boolean applyingCreateTimeConfig;
-    /** Fingerprint of last applied pending config + seed to skip redundant rebakes. */
-    private static int lastAppliedFingerprint;
 
     public CalicoClient(IEventBus modEventBus, ModContainer container) {
         modEventBus.addListener(this::onClientSetup);
@@ -55,13 +59,19 @@ public class CalicoClient {
     }
 
     /**
-     * When create-world is open on the Calico world type and a valid pending config exists,
-     * bake it into LevelStem automatically (Customize Done / bridge submit → playable world).
+     * When create-world is open on the Calico world type, ensure pending create-time config
+     * (Customize Done, or last-selection JSON) is baked into LevelStem.
+     * <p>
+     * Root-cause fix for terrainStyle bake miss: world-type selection resets dimensions to the
+     * datapack preset (plains + OVERWORLD). A fingerprint short-circuit previously skipped
+     * re-bake after that reset, so Sky Islands + Done could still spawn vanilla plains.
+     * Always re-apply when the overworld stem does not yet match the pending config.
      */
     private static void onScreenInit(ScreenEvent.Init.Post event) {
         if (!(event.getScreen() instanceof CreateWorldScreen createWorldScreen)) {
             return;
         }
+        ensurePendingFromPersistence(createWorldScreen);
         createWorldScreen.getUiState().addListener(state -> {
             if (applyingCreateTimeConfig) {
                 return;
@@ -70,6 +80,7 @@ public class CalicoClient {
             if (preset == null || !preset.is(CalicoWorldPresets.CALICO)) {
                 return;
             }
+            ensurePendingFromPersistence(createWorldScreen);
             if (!CalicoCreateWorldBridge.hasValidPending()) {
                 return;
             }
@@ -77,21 +88,76 @@ public class CalicoClient {
             if (config == null) {
                 return;
             }
-            long seed = state.getSettings().options().seed();
-            int fingerprint = Objects.hash(config, seed);
-            if (fingerprint == lastAppliedFingerprint) {
+            if (!needsBake(state.getSettings().selectedDimensions().overworld(), config)) {
                 return;
             }
+            long seed = state.getSettings().options().seed();
             applyingCreateTimeConfig = true;
             try {
                 state.updateDimensions((registries, dimensions) ->
                         CalicoWorldPresets.applyCreateTimeConfig(registries, dimensions, config, seed));
-                lastAppliedFingerprint = fingerprint;
+                Calico.LOGGER.info(
+                        "Calico: auto-baked create-time LevelStem (terrainStyle={}, biomes={})",
+                        config.terrainStyle() == null ? "normal" : config.terrainStyle().serializedName(),
+                        config.selectedBiomes().size());
             } catch (IllegalArgumentException ex) {
                 Calico.LOGGER.warn("Calico: failed to apply create-time config to LevelStem: {}", ex.getMessage());
             } finally {
                 applyingCreateTimeConfig = false;
             }
         });
+    }
+
+    /**
+     * Session restart clears in-memory pending; last Customize selection still lives on disk.
+     * Hydrate pending so Calico world-type select cannot ignore terrainStyle.
+     */
+    private static void ensurePendingFromPersistence(CreateWorldScreen screen) {
+        if (CalicoCreateWorldBridge.hasValidPending()) {
+            return;
+        }
+        Minecraft minecraft = screen.getMinecraft();
+        if (minecraft == null) {
+            return;
+        }
+        BiomeSelectionPersistence.load(minecraft).ifPresent(loaded -> {
+            CalicoConfigValidation.Result result = CalicoConfigValidation.validateForCreate(loaded);
+            if (result.valid()) {
+                CalicoCreateTimeConfig.setPending(result.sanitized());
+                Calico.LOGGER.info(
+                        "Calico: restored create-time pending from last selection (terrainStyle={})",
+                        result.sanitized().terrainStyle().serializedName());
+            }
+        });
+    }
+
+    /**
+     * Returns true when overworld stem still looks like the datapack placeholder (or otherwise
+     * does not reflect pending biomes / terrainStyle) — create path must not ignore style.
+     */
+    private static boolean needsBake(ChunkGenerator overworld, CalicoWorldGenConfig config) {
+        if (!(overworld instanceof NoiseBasedChunkGenerator noiseGen)) {
+            return true;
+        }
+        TerrainStyle style = config.terrainStyle() == null ? TerrainStyle.NORMAL : config.terrainStyle();
+        boolean customTerrain = style != TerrainStyle.NORMAL
+                && style != TerrainStyle.ISLANDS
+                && style != TerrainStyle.BIG_ISLANDS
+                && style != TerrainStyle.MOUNTAINOUS
+                && style != TerrainStyle.CAVE;
+        // Datapack preset / world-type reset leaves vanilla OVERWORLD noise — that is the bake miss.
+        if (customTerrain && noiseGen.stable(NoiseGeneratorSettings.OVERWORLD)) {
+            return true;
+        }
+        if (style == TerrainStyle.SKY_ISLANDS && !noiseGen.stable(com.calico.worldgen.CalicoTerrainStyles.SKY_ISLANDS)) {
+            return true;
+        }
+        if (style == TerrainStyle.WEDDING_CAKE && !noiseGen.stable(com.calico.worldgen.CalicoTerrainStyles.WEDDING_CAKE)) {
+            return true;
+        }
+        if (!(noiseGen.getBiomeSource() instanceof WeightedBiomeSource)) {
+            return true;
+        }
+        return false;
     }
 }

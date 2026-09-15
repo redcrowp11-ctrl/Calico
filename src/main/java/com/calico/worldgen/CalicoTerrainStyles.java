@@ -7,6 +7,10 @@ import com.calico.config.TerrainStyle;
 
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.data.worldgen.BootstrapContext;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.DensityFunctions;
@@ -16,25 +20,43 @@ import net.minecraft.world.level.levelgen.NoiseSettings;
 import net.minecraft.world.level.levelgen.Noises;
 import net.minecraft.world.level.levelgen.SurfaceRules;
 import net.minecraft.world.level.levelgen.VerticalAnchor;
-import net.minecraft.world.level.levelgen.synth.BlendedNoise;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
 
 /**
  * Resolves {@link TerrainStyle} → overworld {@link NoiseGeneratorSettings} for create-time LevelStem baking.
  * <ul>
  *   <li>{@link TerrainStyle#NORMAL} — vanilla overworld</li>
- *   <li>{@link TerrainStyle#SKY_ISLANDS} — End-like discrete floating islands (not vanilla floating_islands cheese)</li>
- *   <li>{@link TerrainStyle#WEDDING_CAKE} — stacked strata, organic voids, sparse mega-column connectors</li>
+ *   <li>{@link TerrainStyle#SKY_ISLANDS} — archipelago of large floating islands (bulbous, no cones/pencils)</li>
+ *   <li>{@link TerrainStyle#WEDDING_CAKE} — stacked strata, organic voids, sparse fat mega-columns</li>
  *   <li>Other styles — safe fallback to normal with an info log</li>
  * </ul>
+ * <p>
+ * Sky / cake settings are registered as {@code calico:sky_islands} / {@code calico:wedding_cake}
+ * so LevelStem save/reload uses registry Holders (not {@code Holder.direct}, which can silently
+ * fail to round-trip and fall back to vanilla overworld).
  */
 public final class CalicoTerrainStyles {
+    public static final ResourceKey<NoiseGeneratorSettings> SKY_ISLANDS = ResourceKey.create(
+            Registries.NOISE_SETTINGS,
+            ResourceLocation.fromNamespaceAndPath(Calico.MOD_ID, "sky_islands"));
+    public static final ResourceKey<NoiseGeneratorSettings> WEDDING_CAKE = ResourceKey.create(
+            Registries.NOISE_SETTINGS,
+            ResourceLocation.fromNamespaceAndPath(Calico.MOD_ID, "wedding_cake"));
+
     private CalicoTerrainStyles() {
+    }
+
+    /** Datagen / datapack bootstrap for reload-safe noise settings. */
+    public static void bootstrap(BootstrapContext<NoiseGeneratorSettings> context) {
+        HolderGetter<NormalNoise.NoiseParameters> noises = context.lookup(Registries.NOISE);
+        context.register(SKY_ISLANDS, buildSkyIslandsSettings(noises));
+        context.register(WEDDING_CAKE, buildWeddingCakeSettings(noises));
     }
 
     /**
      * Picks noise settings for the overworld stem from {@code style}.
      * Always returns a usable holder (falls back to overworld on unknown / unimplemented).
+     * Prefers registry holders for sky/cake so create + reload cannot ignore terrainStyle.
      */
     public static Holder<NoiseGeneratorSettings> resolveOverworldSettings(
             TerrainStyle style,
@@ -44,12 +66,28 @@ public final class CalicoTerrainStyles {
         return switch (resolved) {
             case NORMAL -> noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD);
             case SKY_ISLANDS -> {
-                Calico.LOGGER.info("Calico: terrainStyle=sky_islands → end-like floating island density");
-                yield Holder.direct(buildSkyIslandsSettings());
+                Calico.LOGGER.info("Calico: terrainStyle=sky_islands → archipelago floating-island density ({})",
+                        SKY_ISLANDS.location());
+                yield noiseSettings.get(SKY_ISLANDS)
+                        .<Holder<NoiseGeneratorSettings>>map(h -> h)
+                        .orElseGet(() -> {
+                            Calico.LOGGER.warn(
+                                    "Calico: {} missing from registry — baking Holder.direct fallback (reload may lose style)",
+                                    SKY_ISLANDS.location());
+                            return Holder.direct(buildSkyIslandsSettings(noises));
+                        });
             }
             case WEDDING_CAKE -> {
-                Calico.LOGGER.info("Calico: terrainStyle=wedding_cake → stacked-strata density");
-                yield Holder.direct(buildWeddingCakeSettings(noises));
+                Calico.LOGGER.info("Calico: terrainStyle=wedding_cake → stacked-strata density ({})",
+                        WEDDING_CAKE.location());
+                yield noiseSettings.get(WEDDING_CAKE)
+                        .<Holder<NoiseGeneratorSettings>>map(h -> h)
+                        .orElseGet(() -> {
+                            Calico.LOGGER.warn(
+                                    "Calico: {} missing from registry — baking Holder.direct fallback (reload may lose style)",
+                                    WEDDING_CAKE.location());
+                            return Holder.direct(buildWeddingCakeSettings(noises));
+                        });
             }
             case ISLANDS, BIG_ISLANDS, MOUNTAINOUS, CAVE -> {
                 Calico.LOGGER.info(
@@ -61,22 +99,31 @@ public final class CalicoTerrainStyles {
     }
 
     /**
-     * Sky islands: discrete End-like floating landmasses with overworld surface rules.
+     * Sky islands: archipelago of large floating landmasses with bulbous/rounded undersides.
      * <p>
-     * Vanilla {@code floating_islands} only slides End {@code base_3d_noise} — continuous cheese that
-     * reads as mountain ceilings + thin pillars. Proper islands need {@code end_islands} (2D selector)
-     * plus that 3D cheese, matching {@code NoiseRouterData.end}.
+     * Avoids vanilla {@code end_islands} (one huge spawn island; outer islands ~1024+ blocks away)
+     * and avoids End 3D cheese / distance cones that read as skinny pencils + inverted-cone hangers.
      */
-    static NoiseGeneratorSettings buildSkyIslandsSettings() {
-        // Same old_blended_noise params as minecraft:end/base_3d_noise
-        DensityFunction base3d = BlendedNoise.createUnseeded(0.25, 0.25, 80.0, 160.0, 4.0);
-        DensityFunction islands = DensityFunctions.cache2d(DensityFunctions.endIslands(0L));
-        DensityFunction slopedCheese = DensityFunctions.add(DensityFunctions.endIslands(0L), base3d);
+    static NoiseGeneratorSettings buildSkyIslandsSettings(HolderGetter<NormalNoise.NoiseParameters> noises) {
+        DensityFunction islands2d = DensityFunctions.cache2d(archipelagoIslandSelector(noises));
+        // Soft bulbous lens — long underside ramp (no pointed cones), rounded top
+        DensityFunction bellyFloor = DensityFunctions.yClampedGradient(52, 92, -1.0, 1.0);
+        DensityFunction bellyCeil = DensityFunctions.yClampedGradient(118, 152, 1.0, -1.0);
+        DensityFunction lens = DensityFunctions.min(bellyFloor, bellyCeil);
+        // Mild horizontal-only nibble on surfaces — NOT 3D cheese (pencils / hanging spikes)
+        DensityFunction surfaceNibble = DensityFunctions.mul(
+                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.85, 0.0),
+                DensityFunctions.constant(0.10));
+        DensityFunction edgeWeather = DensityFunctions.mul(
+                DensityFunctions.noise(noises.getOrThrow(Noises.EROSION), 1.1, 0.0),
+                DensityFunctions.constant(0.08));
+        // islands2d positive on land; amplify so gaps stay void while island cores stay fat
+        DensityFunction body = DensityFunctions.add(
+                DensityFunctions.add(lens, DensityFunctions.mul(islands2d, DensityFunctions.constant(1.65))),
+                DensityFunctions.add(surfaceNibble, edgeWeather));
 
-        // Slide window matches vanilla floating_islands height (0..256), End-like falloff constants.
-        DensityFunction finalDensity = postProcess(slideEndLike(slopedCheese, 0, 256));
-        DensityFunction initial = slideEndLike(
-                DensityFunctions.add(islands, DensityFunctions.constant(-0.703125)), 0, 256);
+        DensityFunction finalDensity = postProcess(slideSky(body));
+        DensityFunction initial = slideSky(DensityFunctions.add(islands2d, DensityFunctions.constant(-0.35)));
 
         NoiseRouter router = new NoiseRouter(
                 DensityFunctions.zero(),
@@ -86,7 +133,7 @@ public final class CalicoTerrainStyles {
                 DensityFunctions.zero(),
                 DensityFunctions.zero(),
                 DensityFunctions.zero(),
-                islands, // erosion slot mirrors End (unused by WeightedBiomeSource)
+                islands2d,
                 DensityFunctions.zero(),
                 DensityFunctions.zero(),
                 initial,
@@ -96,26 +143,40 @@ public final class CalicoTerrainStyles {
                 DensityFunctions.zero());
 
         return new NoiseGeneratorSettings(
-                NoiseSettings.create(0, 256, 2, 1), // End/floating cell size — chunky island silhouettes
+                NoiseSettings.create(0, 256, 2, 1),
                 Blocks.STONE.defaultBlockState(),
                 Blocks.WATER.defaultBlockState(),
                 router,
-                // Overworld biome surfaces on islands; no bedrock floor/roof — open void
                 net.minecraft.data.worldgen.SurfaceRuleData.overworldLike(false, false, false),
                 List.of(),
-                -64, // no ocean fill
+                -64,
                 false,
                 false,
                 false,
-                true); // legacy random — End island + blended noise wiring
+                false);
     }
 
     /**
-     * Same vertical slide vanilla uses for End / floating_islands
-     * ({@code NoiseRouterData.slideEndLike}).
+     * 2D archipelago selector: large islands (low-frequency continental blobs) with neighbors
+     * visible within normal explore/render distance — not End solitude.
      */
-    private static DensityFunction slideEndLike(DensityFunction density, int minY, int height) {
-        return slide(density, minY, height, 72, -184, -23.4375, 4, 32, -0.234375);
+    private static DensityFunction archipelagoIslandSelector(HolderGetter<NormalNoise.NoiseParameters> noises) {
+        // Lower xz scale → larger islands. ~0.28–0.40 keeps big landmasses with nearby neighbors.
+        DensityFunction primary = DensityFunctions.noise(noises.getOrThrow(Noises.CONTINENTALNESS), 0.32, 0.0);
+        DensityFunction secondary = DensityFunctions.noise(noises.getOrThrow(Noises.EROSION), 0.48, 0.0);
+        DensityFunction detail = DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.95, 0.0);
+        DensityFunction blended = DensityFunctions.add(
+                DensityFunctions.mul(primary, DensityFunctions.constant(1.05)),
+                DensityFunctions.add(
+                        DensityFunctions.mul(secondary, DensityFunctions.constant(0.38)),
+                        DensityFunctions.mul(detail, DensityFunctions.constant(0.12))));
+        // Slight land bias so islands are generous in size while gaps still open between them
+        return DensityFunctions.add(blended, DensityFunctions.constant(0.08));
+    }
+
+    /** Gentle vertical slide for sky band — softer than End so undersides stay bulbous. */
+    private static DensityFunction slideSky(DensityFunction density) {
+        return slide(density, 0, 256, 48, -40, -0.15, 8, 40, -0.15);
     }
 
     private static DensityFunction slide(
@@ -137,17 +198,14 @@ public final class CalicoTerrainStyles {
     }
 
     /**
-     * Wedding-cake: several thin horizontal strata with strong noise-warped surfaces (organic continuous
-     * voids, not laser-flat), sparse mega stalagmite/stalactite columns bridging the gaps, and a sealed
+     * Wedding-cake: thin horizontal strata with strong noise-warped surfaces (organic continuous
+     * voids, not laser-flat), sparse mega dripstone trunks bridging the gaps, and a sealed
      * bedrock floor so players cannot fall into the world-void kill.
-     * <p>
-     * Surfaces are cave/strata (stone/deepslate) — not overworld grass lawns under ceilings.
      */
     static NoiseGeneratorSettings buildWeddingCakeSettings(HolderGetter<NormalNoise.NoiseParameters> noises) {
         DensityFunction finalDensity = postProcess(weddingCakeDensity(noises));
-        // initialDensity ≈ coarse solid occupancy for spawn / aquifers off
         DensityFunction initial = DensityFunctions.max(
-                DensityFunctions.max(weddingCakeLayerBands(DensityFunctions.zero()), sealedWorldFloor()),
+                DensityFunctions.max(weddingCakeLayerBands(DensityFunctions.zero(), noises), sealedWorldFloor()),
                 DensityFunctions.constant(-0.5));
 
         NoiseRouter router = new NoiseRouter(
@@ -174,17 +232,13 @@ public final class CalicoTerrainStyles {
                 router,
                 weddingCakeSurface(),
                 List.of(),
-                -64, // no ocean fill — voids stay open
+                -64,
                 false,
                 false,
                 false,
                 false);
     }
 
-    /**
-     * Cave/strata dressing: bedrock apron, deepslate low, stone elsewhere.
-     * No grass/dirt/bandlands — interiors must not read as overworld lawns under a ceiling.
-     */
     private static SurfaceRules.RuleSource weddingCakeSurface() {
         SurfaceRules.RuleSource stone = SurfaceRules.state(Blocks.STONE.defaultBlockState());
         SurfaceRules.RuleSource deepslate = SurfaceRules.state(Blocks.DEEPSLATE.defaultBlockState());
@@ -210,50 +264,57 @@ public final class CalicoTerrainStyles {
     }
 
     private static DensityFunction weddingCakeDensity(HolderGetter<NormalNoise.NoiseParameters> noises) {
-        // Strong HORIZONTAL-ONLY warp: organic floors/ceilings without 3D cheese fins / mesa towers.
         DensityFunction surfaceWarp = DensityFunctions.mul(
                 DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.38, 0.0),
-                DensityFunctions.constant(1.45));
+                DensityFunctions.constant(1.55));
         DensityFunction detailWarp = DensityFunctions.mul(
                 DensityFunctions.noise(noises.getOrThrow(Noises.CAVE_CHEESE), 0.60, 0.0),
-                DensityFunctions.constant(0.65));
+                DensityFunctions.constant(0.72));
         DensityFunction jaggedWarp = DensityFunctions.mul(
                 DensityFunctions.noise(noises.getOrThrow(Noises.JAGGED), 0.28, 0.0),
-                DensityFunctions.constant(0.48));
-        // High-frequency rim nibble — weathers plate edges / skirts (not clean geometric cuts).
+                DensityFunctions.constant(0.55));
         DensityFunction rimErosion = DensityFunctions.mul(
                 DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 1.15, 0.0),
-                DensityFunctions.constant(-0.55));
+                DensityFunctions.constant(-0.62));
+        DensityFunction irregular = DensityFunctions.mul(
+                DensityFunctions.noise(noises.getOrThrow(Noises.EROSION), 0.42, 0.0),
+                DensityFunctions.constant(0.40));
         DensityFunction warp = DensityFunctions.add(
                 surfaceWarp,
-                DensityFunctions.add(detailWarp, DensityFunctions.add(jaggedWarp, rimErosion)));
+                DensityFunctions.add(detailWarp,
+                        DensityFunctions.add(jaggedWarp, DensityFunctions.add(rimErosion, irregular))));
 
-        DensityFunction layers = weddingCakeLayerBands(warp);
+        DensityFunction layers = weddingCakeLayerBands(warp, noises);
         DensityFunction columns = sparseMegaColumns(noises);
-        // Floor seal is unwarped — warp must never punch a kill-hole through bedrock.
         return DensityFunctions.max(DensityFunctions.max(layers, columns), sealedWorldFloor());
     }
 
-    /**
-     * Hard solid apron from minY upward. Unwarped so the bottom can never open into void-kill.
-     * Fades out around Y -44 so it meets the lowest cake plate without a hard shelf.
-     */
     private static DensityFunction sealedWorldFloor() {
         return DensityFunctions.yClampedGradient(-52, -44, 1.0, -1.0);
     }
 
     /**
-     * Six thin stacked plates with large voids between them (more air / thinner solids than v1).
-     * Each band is min(floorRise, ceilingFall) + warp.
+     * Six stacked plates with large voids. Bottom plate gets extra roughness so it is not a
+     * billiard-table slab above the void seal.
      */
-    private static DensityFunction weddingCakeLayerBands(DensityFunction warp) {
-        // centerY, halfThickness, edgeSoftness — wider soft shells so rims weather organically (not stepped cuts)
-        DensityFunction l1 = warpedBand(12, 8, 16, warp);   // ~ Y -12..36
-        DensityFunction l2 = warpedBand(68, 6, 15, warp);   // ~ Y 47..89
-        DensityFunction l3 = warpedBand(118, 5, 14, warp);  // ~ Y 99..137
-        DensityFunction l4 = warpedBand(162, 5, 13, warp);  // ~ Y 144..180
-        DensityFunction l5 = warpedBand(208, 4, 13, warp);  // ~ Y 191..225
-        DensityFunction l6 = warpedBand(250, 4, 12, warp);  // ~ Y 234..266
+    private static DensityFunction weddingCakeLayerBands(
+            DensityFunction warp, HolderGetter<NormalNoise.NoiseParameters> noises) {
+        DensityFunction bottomRough = DensityFunctions.add(
+                warp,
+                DensityFunctions.add(
+                        DensityFunctions.mul(
+                                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.22, 0.0),
+                                DensityFunctions.constant(1.15)),
+                        DensityFunctions.mul(
+                                DensityFunctions.noise(noises.getOrThrow(Noises.JAGGED), 0.40, 0.0),
+                                DensityFunctions.constant(0.70))));
+        // Wider soft shells + uneven thicknesses — weathered arches, not CAD slabs
+        DensityFunction l1 = warpedBand(12, 9, 22, bottomRough);  // rough bottom plate above void
+        DensityFunction l2 = warpedBand(68, 6, 17, warp);
+        DensityFunction l3 = warpedBand(118, 5, 16, warp);
+        DensityFunction l4 = warpedBand(162, 6, 15, warp);
+        DensityFunction l5 = warpedBand(208, 4, 14, warp);
+        DensityFunction l6 = warpedBand(250, 4, 13, warp);
         return DensityFunctions.max(
                 DensityFunctions.max(DensityFunctions.max(l1, l2), DensityFunctions.max(l3, l4)),
                 DensityFunctions.max(l5, l6));
@@ -271,35 +332,30 @@ public final class CalicoTerrainStyles {
     }
 
     /**
-     * Sparse mega stalagmite/stalactite columns (vanilla dripstone-mega vibe: wide bases,
-     * tall continuity, weathered skirts). Soft threshold — no hard geometric cylinder cuts;
-     * thin mesa/pencil fringes stay negative.
+     * Sparse FAT mega dripstone trunks only — high thickness + harsh fringe gate kills pencil spikes.
      */
     private static DensityFunction sparseMegaColumns(HolderGetter<NormalNoise.NoiseParameters> noises) {
-        // Lower xz scale → wider body; low y scale → tall vertical continuity.
-        DensityFunction pillar = DensityFunctions.noise(noises.getOrThrow(Noises.PILLAR), 3.5, 0.07);
-        // Harsher rarity → fewer columns (still sparse).
-        DensityFunction rarity = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_RARENESS), 0.0, -3.45);
-        // High min thickness → fat mega dripstone, not skinny pillars.
-        DensityFunction thickness = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_THICKNESS), 1.25, 3.0);
+        // Low xz scale → wide trunks; very low y scale → tall continuity
+        DensityFunction pillar = DensityFunctions.noise(noises.getOrThrow(Noises.PILLAR), 1.85, 0.045);
+        DensityFunction rarity = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_RARENESS), 0.0, -3.85);
+        // High min thickness → true mega trunks, not skinny pencils
+        DensityFunction thickness = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_THICKNESS), 2.35, 4.8);
         DensityFunction shaped = DensityFunctions.add(
-                DensityFunctions.mul(pillar, DensityFunctions.constant(2.9)),
+                DensityFunctions.mul(pillar, DensityFunctions.constant(3.4)),
                 rarity);
         DensityFunction body = DensityFunctions.mul(shaped, thickness.cube());
-        // Weathered skirt / irregular silhouette (horizontal nibble on the column shell).
         DensityFunction skirt = DensityFunctions.mul(
-                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.85, 0.0),
-                DensityFunctions.constant(0.35));
+                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.75, 0.0),
+                DensityFunctions.constant(0.42));
         DensityFunction jaggedSkirt = DensityFunctions.mul(
-                DensityFunctions.noise(noises.getOrThrow(Noises.JAGGED), 0.55, 0.0),
-                DensityFunctions.constant(0.22));
+                DensityFunctions.noise(noises.getOrThrow(Noises.JAGGED), 0.50, 0.0),
+                DensityFunctions.constant(0.28));
         DensityFunction raw = DensityFunctions.cacheOnce(
                 DensityFunctions.add(body, DensityFunctions.add(skirt, jaggedSkirt)));
-        // Soft gate (subtract threshold) keeps natural density falloff — not a laser-cut isosurface.
-        return DensityFunctions.add(raw, DensityFunctions.constant(-0.10));
+        // Harsh negative gate — thin fringes / pencil spikes go negative and disappear
+        return DensityFunctions.add(raw, DensityFunctions.constant(-0.55));
     }
 
-    /** Same squeeze pipeline vanilla uses for final_density readability. */
     private static DensityFunction postProcess(DensityFunction densityFunction) {
         DensityFunction blended = DensityFunctions.blendDensity(densityFunction);
         return DensityFunctions.mul(DensityFunctions.interpolated(blended), DensityFunctions.constant(0.64)).squeeze();

@@ -244,7 +244,9 @@ public final class CalicoWorldPresets {
         net.minecraft.data.DataProvider.Factory<DatapackBuiltinEntriesProvider> factory = output -> new DatapackBuiltinEntriesProvider(
                 output,
                 event.getLookupProvider(),
-                new RegistrySetBuilder().add(Registries.WORLD_PRESET, CalicoWorldPresets::bootstrap),
+                new RegistrySetBuilder()
+                        .add(Registries.NOISE_SETTINGS, CalicoTerrainStyles::bootstrap)
+                        .add(Registries.WORLD_PRESET, CalicoWorldPresets::bootstrap),
                 Set.of(Calico.MOD_ID));
         event.getGenerator().addProvider(event.includeServer(), factory);
     }

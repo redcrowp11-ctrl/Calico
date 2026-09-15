@@ -41,8 +41,8 @@ Aliases accepted leniently on parse: `vanilla`/`large`/`default` → normal; `ti
 | Serialized | Behavior (Phase 2 first slice) |
 |------------|--------------------------------|
 | `normal` | Default overworld noise settings (current Calico overworld) |
-| `sky_islands` | End-like discrete floating islands (end_islands + 3D cheese) + Calico biomes; not vanilla floating_islands cheese |
-| `wedding_cake` | Thin stacked strata + organic warped voids; sparse fat mega dripstone columns; cave/strata surfaces (no grass lawns); sealed bedrock floor |
+| `sky_islands` | Archipelago of large floating islands (bulbous undersides, no End solitude / cones / pencil spikes) + Calico biomes; registered as `calico:sky_islands` |
+| `wedding_cake` | Thin stacked strata + organic warped voids; sparse fat mega dripstone trunks; cave/strata surfaces (no grass lawns); rough bottom plate; sealed bedrock floor; registered as `calico:wedding_cake` |
 | `islands` | **Fallback → normal** (logged) |
 | `big_islands` | **Fallback → normal** (logged) |
 | `mountainous` | **Fallback → normal** (logged) |
@@ -70,7 +70,8 @@ Shared API: `com.calico.config.CalicoConfigValidation#validateForCreate`
 4. Overworld chunk gen uses `CalicoTerrainStyles.resolveOverworldSettings(terrainStyle, …)` so noise settings match the picker (WeightedBiomeSource + biomeScale preserved).
 5. Calico world-type Customize opens `CalicoCreateWorldScreen` (CycleButtons for biome scale + terrain style); selecting Calico with a pending config also auto-bakes into LevelStem on the create-world screen.
 6. `biomeScale` is baked into `WeightedBiomeSource` (codec field `biomeScale`) so Customize / reload preserves Normal vs Quilt.
-7. `terrainStyle` is baked into the overworld `NoiseBasedChunkGenerator` settings holder at create time.
+7. `terrainStyle` is baked into the overworld `NoiseBasedChunkGenerator` settings holder at create time via registry keys `calico:sky_islands` / `calico:wedding_cake` (not anonymous `Holder.direct`, so save/reload cannot silently become Normal).
+8. Create-world auto-bake re-applies whenever the overworld stem is still vanilla OVERWORLD while a custom terrainStyle is pending (world-type reset used to skip re-bake).
 
 Java types:
 

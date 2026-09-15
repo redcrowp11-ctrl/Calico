@@ -4,38 +4,38 @@
       "type": "minecraft:overworld",
       "generator": {
         "type": "minecraft:noise",
-        "settings": "minecraft:overworld",
         "biome_source": {
           "type": "calico:weighted",
-          "seed": 0,
           "biomes": [
             {
               "biome": "minecraft:plains",
               "weight": 1.0
             }
-          ]
-        }
-      }
-    },
-    "minecraft:the_nether": {
-      "type": "minecraft:the_nether",
-      "generator": {
-        "type": "minecraft:noise",
-        "settings": "minecraft:nether",
-        "biome_source": {
-          "type": "minecraft:multi_noise",
-          "preset": "minecraft:nether"
-        }
+          ],
+          "seed": 0
+        },
+        "settings": "minecraft:overworld"
       }
     },
     "minecraft:the_end": {
       "type": "minecraft:the_end",
       "generator": {
         "type": "minecraft:noise",
-        "settings": "minecraft:end",
         "biome_source": {
           "type": "minecraft:the_end"
-        }
+        },
+        "settings": "minecraft:end"
+      }
+    },
+    "minecraft:the_nether": {
+      "type": "minecraft:the_nether",
+      "generator": {
+        "type": "minecraft:noise",
+        "biome_source": {
+          "type": "minecraft:multi_noise",
+          "preset": "minecraft:nether"
+        },
+        "settings": "minecraft:nether"
       }
     }
   }
