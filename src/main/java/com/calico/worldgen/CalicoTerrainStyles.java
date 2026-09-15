@@ -22,7 +22,7 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
  * <ul>
  *   <li>{@link TerrainStyle#NORMAL} — vanilla overworld</li>
  *   <li>{@link TerrainStyle#SKY_ISLANDS} — vanilla floating_islands</li>
- *   <li>{@link TerrainStyle#WEDDING_CAKE} — stacked strata, organic voids, sparse column connectors</li>
+ *   <li>{@link TerrainStyle#WEDDING_CAKE} — stacked strata, organic voids, sparse mega-column connectors</li>
  *   <li>Other styles — safe fallback to normal with an info log</li>
  * </ul>
  */
@@ -59,14 +59,15 @@ public final class CalicoTerrainStyles {
     }
 
     /**
-     * Wedding-cake: several horizontal strata with noise-warped surfaces (organic continuous voids,
-     * not laser-flat), plus sparse deterministic pillar columns bridging the gaps.
+     * Wedding-cake: several thin horizontal strata with strong noise-warped surfaces (organic continuous
+     * voids, not laser-flat), sparse mega stalagmite/stalactite columns bridging the gaps, and a sealed
+     * bedrock floor so players cannot fall into the world-void kill.
      */
     static NoiseGeneratorSettings buildWeddingCakeSettings(HolderGetter<NormalNoise.NoiseParameters> noises) {
         DensityFunction finalDensity = postProcess(weddingCakeDensity(noises));
         // initialDensity ≈ coarse solid occupancy for spawn / aquifers off
         DensityFunction initial = DensityFunctions.max(
-                weddingCakeLayerBands(DensityFunctions.zero()),
+                DensityFunctions.max(weddingCakeLayerBands(DensityFunctions.zero()), sealedWorldFloor()),
                 DensityFunctions.constant(-0.5));
 
         NoiseRouter router = new NoiseRouter(
@@ -101,32 +102,47 @@ public final class CalicoTerrainStyles {
     }
 
     private static DensityFunction weddingCakeDensity(HolderGetter<NormalNoise.NoiseParameters> noises) {
-        // Horizontal warp so stratum surfaces undulate (organic voids, not laser-flat slabs).
+        // Stronger horizontal warp so stratum floors/ceilings undulate (organic, not slab-flat).
         DensityFunction surfaceWarp = DensityFunctions.mul(
-                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.75, 0.0),
-                DensityFunctions.constant(0.45));
+                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.55, 0.0),
+                DensityFunctions.constant(0.95));
         DensityFunction cheeseWarp = DensityFunctions.mul(
-                DensityFunctions.noise(noises.getOrThrow(Noises.CAVE_CHEESE), 0.4, 0.4),
-                DensityFunctions.constant(0.18));
-        DensityFunction warp = DensityFunctions.add(surfaceWarp, cheeseWarp);
+                DensityFunctions.noise(noises.getOrThrow(Noises.CAVE_CHEESE), 0.35, 0.35),
+                DensityFunctions.constant(0.40));
+        DensityFunction jaggedWarp = DensityFunctions.mul(
+                DensityFunctions.noise(noises.getOrThrow(Noises.JAGGED), 0.5, 0.0),
+                DensityFunctions.constant(0.22));
+        DensityFunction warp = DensityFunctions.add(surfaceWarp, DensityFunctions.add(cheeseWarp, jaggedWarp));
 
         DensityFunction layers = weddingCakeLayerBands(warp);
-        DensityFunction columns = sparseColumns(noises);
-        return DensityFunctions.max(layers, columns);
+        DensityFunction columns = sparseMegaColumns(noises);
+        // Floor seal is unwarped — warp must never punch a kill-hole through bedrock.
+        return DensityFunctions.max(DensityFunctions.max(layers, columns), sealedWorldFloor());
     }
 
     /**
-     * Four stacked strata (thicker at the bottom). Each band is min(floorRise, ceilingFall) + warp.
+     * Hard solid apron from minY upward. Unwarped so the bottom can never open into void-kill.
+     * Fades out around Y -44 so it meets the lowest cake plate without a hard shelf.
+     */
+    private static DensityFunction sealedWorldFloor() {
+        return DensityFunctions.yClampedGradient(-52, -44, 1.0, -1.0);
+    }
+
+    /**
+     * Six thin stacked plates with large voids between them (more air / thinner solids than v1).
+     * Each band is min(floorRise, ceilingFall) + warp.
      */
     private static DensityFunction weddingCakeLayerBands(DensityFunction warp) {
-        // centerY, halfThickness, edgeSoftness
-        DensityFunction base = warpedBand(8, 44, 14, warp);      // thick foundation ~ Y -50..66
-        DensityFunction mid1 = warpedBand(105, 20, 12, warp);    // ~ Y 73..137
-        DensityFunction mid2 = warpedBand(175, 14, 10, warp);    // ~ Y 151..199
-        DensityFunction top = warpedBand(235, 10, 8, warp);      // ~ Y 217..253
+        // centerY, halfThickness, edgeSoftness — thinner plates, wider gaps (~25–40 block voids)
+        DensityFunction l1 = warpedBand(12, 9, 11, warp);   // ~ Y -8..32
+        DensityFunction l2 = warpedBand(68, 7, 10, warp);   // ~ Y 51..85
+        DensityFunction l3 = warpedBand(118, 6, 9, warp);   // ~ Y 103..133
+        DensityFunction l4 = warpedBand(162, 6, 8, warp);   // ~ Y 148..176
+        DensityFunction l5 = warpedBand(208, 5, 8, warp);   // ~ Y 195..221
+        DensityFunction l6 = warpedBand(250, 5, 7, warp);   // ~ Y 238..262
         return DensityFunctions.max(
-                DensityFunctions.max(base, mid1),
-                DensityFunctions.max(mid2, top));
+                DensityFunctions.max(DensityFunctions.max(l1, l2), DensityFunctions.max(l3, l4)),
+                DensityFunctions.max(l5, l6));
     }
 
     private static DensityFunction warpedBand(int centerY, int halfThickness, int edgeSoftness, DensityFunction warp) {
@@ -141,15 +157,18 @@ public final class CalicoTerrainStyles {
     }
 
     /**
-     * Sparse, deterministic pillar / stalagmite-stalactite columns (vanilla pillar noises, rarer).
+     * Sparse, deterministic mega stalagmite/stalactite columns (vanilla dripstone-mega vibe:
+     * wide bases, vertical continuity — not thin pencil pillars).
      */
-    private static DensityFunction sparseColumns(HolderGetter<NormalNoise.NoiseParameters> noises) {
-        DensityFunction pillar = DensityFunctions.noise(noises.getOrThrow(Noises.PILLAR), 22.0, 0.28);
-        // More negative rarity → fewer columns (sparse).
-        DensityFunction rarity = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_RARENESS), 0.0, -3.2);
-        DensityFunction thickness = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_THICKNESS), 0.0, 1.2);
+    private static DensityFunction sparseMegaColumns(HolderGetter<NormalNoise.NoiseParameters> noises) {
+        // Lower xz scale → wider features; lower y scale → taller vertical continuity.
+        DensityFunction pillar = DensityFunctions.noise(noises.getOrThrow(Noises.PILLAR), 9.0, 0.12);
+        // Still sparse (more negative rarity → fewer columns).
+        DensityFunction rarity = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_RARENESS), 0.0, -2.9);
+        // Thicker body (vanilla dripstone mega feel).
+        DensityFunction thickness = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_THICKNESS), 0.45, 2.0);
         DensityFunction shaped = DensityFunctions.add(
-                DensityFunctions.mul(pillar, DensityFunctions.constant(2.0)),
+                DensityFunctions.mul(pillar, DensityFunctions.constant(2.6)),
                 rarity);
         return DensityFunctions.cacheOnce(DensityFunctions.mul(shaped, thickness.cube()));
     }

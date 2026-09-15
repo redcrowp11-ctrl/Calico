@@ -28,7 +28,7 @@ import net.minecraft.world.level.biome.Climate;
  *   <li>Any subset of biomes with per-biome weights</li>
  *   <li>Deterministic from world {@code seed} + position</li>
  *   <li>Single biome ⇒ always that biome (100%)</li>
- *   <li>{@link BiomeScale#NORMAL} — large contiguous Voronoi regions (vanilla-comparable)</li>
+ *   <li>{@link BiomeScale#NORMAL} — large contiguous Voronoi regions (vanilla-comparable) with light border dither</li>
  *   <li>{@link BiomeScale#QUILT} — per-quart hash → tight patchwork micro-biomes</li>
  * </ul>
  */
@@ -38,6 +38,12 @@ public class WeightedBiomeSource extends BiomeSource {
      * 128 quarte × 4 blocks = 512-block mean region scale (vanilla-comparable).
      */
     private static final int NORMAL_CELL_QUARTS = 128;
+
+    /**
+     * Soft border blend width in quart space for Normal (Voronoi) scale.
+     * 6 quarts × 4 blocks ≈ 24-block subtle dither band — not quilt.
+     */
+    private static final double NORMAL_BORDER_BLEND_QUARTS = 6.0;
 
     public static final MapCodec<WeightedBiomeSource> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             com.mojang.serialization.Codec.LONG.fieldOf("seed").forGetter(WeightedBiomeSource::seed),
@@ -214,22 +220,26 @@ public class WeightedBiomeSource extends BiomeSource {
             // High-frequency: independent pick per quart → tight quilt / micro-biomes.
             return pickFromHash(mixSeed(seed, quartX, quartZ));
         }
-        // Normal: large Voronoi cells → contiguous vanilla-scale regions; weights ≈ area share.
-        return pickFromHash(voronoiCellHash(quartX, quartZ));
+        // Normal: large Voronoi cells → contiguous vanilla-scale regions; light border dither.
+        return pickNormalVoronoi(quartX, quartZ);
     }
 
     /**
-     * Nearest jittered Voronoi cell in quart space; returns a stable hash for that cell
-     * so the weighted biome pick is constant across the whole region.
+     * Nearest jittered Voronoi cell in quart space, with a subtle soft blend at borders.
+     * Deep inside a cell the biome is stable; near edges a small dither band softens
+     * desert/plains-style hard seams without becoming quilt.
      */
-    private long voronoiCellHash(int quartX, int quartZ) {
+    private Holder<Biome> pickNormalVoronoi(int quartX, int quartZ) {
         final int cell = NORMAL_CELL_QUARTS;
         int cellX = Math.floorDiv(quartX, cell);
         int cellZ = Math.floorDiv(quartZ, cell);
 
         double bestDist = Double.POSITIVE_INFINITY;
+        double secondDist = Double.POSITIVE_INFINITY;
         int bestCX = cellX;
         int bestCZ = cellZ;
+        int secondCX = cellX;
+        int secondCZ = cellZ;
 
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
@@ -245,14 +255,39 @@ public class WeightedBiomeSource extends BiomeSource {
                 double ddz = quartZ - pz;
                 double dist = ddx * ddx + ddz * ddz;
                 if (dist < bestDist) {
+                    secondDist = bestDist;
+                    secondCX = bestCX;
+                    secondCZ = bestCZ;
                     bestDist = dist;
                     bestCX = cx;
                     bestCZ = cz;
+                } else if (dist < secondDist) {
+                    secondDist = dist;
+                    secondCX = cx;
+                    secondCZ = cz;
                 }
             }
         }
+
+        int pickCX = bestCX;
+        int pickCZ = bestCZ;
+        // Soft edge: when F2−F1 is within the blend band, occasionally use the second cell.
+        if (secondDist < Double.POSITIVE_INFINITY && NORMAL_BORDER_BLEND_QUARTS > 0.0d) {
+            double gap = Math.sqrt(secondDist) - Math.sqrt(bestDist);
+            if (gap < NORMAL_BORDER_BLEND_QUARTS) {
+                long edgeHash = mixSeed(seed ^ 0xD1B54A32D192ED03L, quartX, quartZ);
+                double unit = ((edgeHash >>> 1) & 0x1FFFFFFFFFFFFFL) / (double) 0x1FFFFFFFFFFFFFL;
+                // ~50% second-cell at exact border (gap=0), fading to 0% at blend edge — subtle, not quilt.
+                double keepNearestBelow = 0.5d + 0.5d * (gap / NORMAL_BORDER_BLEND_QUARTS);
+                if (unit > keepNearestBelow) {
+                    pickCX = secondCX;
+                    pickCZ = secondCZ;
+                }
+            }
+        }
+
         // Distinct mix from jitter seed so biome pick ≠ jitter entropy alone.
-        return mixSeed(seed ^ 0x9E3779B97F4A7C15L, bestCX, bestCZ);
+        return pickFromHash(mixSeed(seed ^ 0x9E3779B97F4A7C15L, pickCX, pickCZ));
     }
 
     private Holder<Biome> pickFromHash(long hash) {

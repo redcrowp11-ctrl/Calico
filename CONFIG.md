@@ -31,7 +31,7 @@ Canonical JSON for biome selection (export/import, last-selection, world-create 
 
 ### `biomeScale` behavior
 
-- **`normal`** (default) — vanilla-comparable contiguous biome regions (large Voronoi cells ≈ 512 blocks). Still only uses selected biomes + weights.
+- **`normal`** (default) — vanilla-comparable contiguous biome regions (large Voronoi cells ≈ 512 blocks) with a light ~24-block border dither. Still only uses selected biomes + weights.
 - **`quilt`** — high-frequency tight patchwork (per-quart hash); patches a few blocks wide. The original Calico look, kept as a toggle.
 
 Aliases accepted leniently on parse: `vanilla`/`large`/`default` → normal; `tight`/`patchwork`/`micro` → quilt.
@@ -42,7 +42,7 @@ Aliases accepted leniently on parse: `vanilla`/`large`/`default` → normal; `ti
 |------------|--------------------------------|
 | `normal` | Default overworld noise settings (current Calico overworld) |
 | `sky_islands` | Vanilla `floating_islands` noise settings + Calico biomes |
-| `wedding_cake` | Custom stacked strata; organic continuous voids; sparse deterministic pillar columns between layers |
+| `wedding_cake` | Thin stacked strata + large organic voids; sparse mega stalagmite columns; sealed bedrock floor (no void-kill) |
 | `islands` | **Fallback → normal** (logged) |
 | `big_islands` | **Fallback → normal** (logged) |
 | `mountainous` | **Fallback → normal** (logged) |
