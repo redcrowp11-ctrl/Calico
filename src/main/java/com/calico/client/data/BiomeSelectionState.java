@@ -13,6 +13,7 @@ import javax.annotation.Nullable;
 
 import com.calico.config.BiomeScale;
 import com.calico.config.CalicoWorldGenConfig;
+import com.calico.config.TerrainStyle;
 import com.calico.config.SelectedBiomeEntry;
 
 import net.minecraft.resources.ResourceLocation;
@@ -28,6 +29,7 @@ public final class BiomeSelectionState {
     @Nullable
     private ResourceLocation focused;
     private BiomeScale biomeScale = BiomeScale.NORMAL;
+    private TerrainStyle terrainStyle = TerrainStyle.NORMAL;
     private int lastUnavailableCount;
     private List<ResourceLocation> lastUnavailableIds = List.of();
 
@@ -58,6 +60,14 @@ public final class BiomeSelectionState {
 
     public void setBiomeScale(BiomeScale biomeScale) {
         this.biomeScale = biomeScale == null ? BiomeScale.NORMAL : biomeScale;
+    }
+
+    public TerrainStyle terrainStyle() {
+        return terrainStyle;
+    }
+
+    public void setTerrainStyle(TerrainStyle terrainStyle) {
+        this.terrainStyle = terrainStyle == null ? TerrainStyle.NORMAL : terrainStyle;
     }
 
     public int lastUnavailableCount() {
@@ -141,7 +151,7 @@ public final class BiomeSelectionState {
     public void clear() {
         selected.clear();
         focused = null;
-        // Keep biomeScale — scale is an options preference, not selection.
+        // Keep biomeScale / terrainStyle — options preferences, not selection.
     }
 
     /** Invert check state for currently visible biomes only. */
@@ -193,6 +203,7 @@ public final class BiomeSelectionState {
         clear();
         CalicoWorldGenConfig sanitized = config.sanitized();
         this.biomeScale = sanitized.biomeScale() == null ? BiomeScale.NORMAL : sanitized.biomeScale();
+        this.terrainStyle = sanitized.terrainStyle() == null ? TerrainStyle.NORMAL : sanitized.terrainStyle();
         for (SelectedBiomeEntry entry : sanitized.selectedBiomes()) {
             ResourceLocation id = entry.resourceLocationOrNull();
             if (id == null) {
@@ -209,7 +220,7 @@ public final class BiomeSelectionState {
     public CalicoWorldGenConfig toConfig() {
         List<SelectedBiomeEntry> list = new ArrayList<>(selected.size());
         selected.forEach((id, weight) -> list.add(new SelectedBiomeEntry(id.toString(), weight)));
-        return CalicoWorldGenConfig.of(list, biomeScale);
+        return CalicoWorldGenConfig.of(list, biomeScale, terrainStyle);
     }
 
     public void removeAll(Collection<ResourceLocation> ids) {

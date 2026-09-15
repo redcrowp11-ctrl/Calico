@@ -11,6 +11,7 @@ import com.calico.client.data.BiomeTagClassifier;
 import com.calico.config.BiomeScale;
 import com.calico.config.CalicoConfigValidation;
 import com.calico.config.CalicoWorldGenConfig;
+import com.calico.config.TerrainStyle;
 import com.calico.fun.FunTabStub;
 import com.calico.worldgen.BiomeDimension;
 import com.calico.worldgen.BiomeRegistryDiscovery;
@@ -115,11 +116,11 @@ public class CalicoCreateWorldScreen extends Screen {
         // --- Header: wordmark reserve ---
         int headerBottom = 6 + WORDMARK_DRAW_H;
 
-        // --- Toolbar row: Dimension | Search | Filters… | Biome scale ---
+        // --- Toolbar row: Dimension | Search | Filters… | Biome scale | Terrain ---
         int toolbarY = headerBottom + 8;
         int x = MARGIN;
 
-        int dimW = 120;
+        int dimW = 110;
         addRenderableWidget(CycleButton.<BiomeDimension>builder(d -> Component.translatable(
                         switch (d) {
                             case OVERWORLD -> "calico.screen.create.tab.overworld";
@@ -140,8 +141,9 @@ public class CalicoCreateWorldScreen extends Screen {
         x += dimW + GAP;
 
         int filtersW = Math.max(80, this.font.width(Component.translatable("calico.screen.create.filters")) + 16);
-        int scaleW = 150;
-        int searchW = Math.max(120, this.width - MARGIN - x - filtersW - scaleW - GAP * 2 - MARGIN);
+        int scaleW = 130;
+        int terrainW = 150;
+        int searchW = Math.max(100, this.width - MARGIN - x - filtersW - scaleW - terrainW - GAP * 3 - MARGIN);
         this.searchBox = new EditBox(this.font, x, toolbarY, searchW, BTN_H,
                 Component.translatable("calico.screen.create.search"));
         this.searchBox.setHint(Component.translatable("calico.screen.create.search.hint"));
@@ -172,6 +174,25 @@ public class CalicoCreateWorldScreen extends Screen {
                 .create(x, toolbarY, scaleW, BTN_H,
                         Component.translatable("calico.screen.create.scale"),
                         (btn, value) -> this.selection.setBiomeScale(value)));
+        x += scaleW + GAP;
+
+        addRenderableWidget(CycleButton.<TerrainStyle>builder(v -> Component.translatable(
+                        switch (v) {
+                            case NORMAL -> "calico.screen.create.terrain.normal";
+                            case SKY_ISLANDS -> "calico.screen.create.terrain.sky_islands";
+                            case ISLANDS -> "calico.screen.create.terrain.islands";
+                            case BIG_ISLANDS -> "calico.screen.create.terrain.big_islands";
+                            case MOUNTAINOUS -> "calico.screen.create.terrain.mountainous";
+                            case CAVE -> "calico.screen.create.terrain.cave";
+                            case WEDDING_CAKE -> "calico.screen.create.terrain.wedding_cake";
+                        }))
+                .withValues(TerrainStyle.values())
+                .withInitialValue(this.selection.terrainStyle())
+                .withTooltip(value -> Tooltip.create(Component.translatable(
+                        "calico.screen.create.terrain." + value.serializedName() + ".tooltip")))
+                .create(x, toolbarY, terrainW, BTN_H,
+                        Component.translatable("calico.screen.create.terrain"),
+                        (btn, value) -> this.selection.setTerrainStyle(value)));
 
         this.listTop = toolbarY + BTN_H + GAP;
 

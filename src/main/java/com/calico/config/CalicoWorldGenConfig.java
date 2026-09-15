@@ -17,20 +17,27 @@ import net.minecraft.resources.ResourceLocation;
  * {
  *   "version": 1,
  *   "selectedBiomes": [{ "id": "minecraft:desert", "weight": 1.0 }],
- *   "biomeScale": "normal"
+ *   "biomeScale": "normal",
+ *   "terrainStyle": "normal"
  * }
  * </pre>
  * Field names {@code version} and {@code selectedBiomes} are LOCKED.
  * Additive optional field {@code biomeScale} ({@code "normal"} | {@code "quilt"});
  * omit / unset → {@link BiomeScale#NORMAL}.
+ * Additive optional field {@code terrainStyle}; omit / unset → {@link TerrainStyle#NORMAL}.
  */
-public record CalicoWorldGenConfig(int version, List<SelectedBiomeEntry> selectedBiomes, BiomeScale biomeScale) {
+public record CalicoWorldGenConfig(
+        int version,
+        List<SelectedBiomeEntry> selectedBiomes,
+        BiomeScale biomeScale,
+        TerrainStyle terrainStyle) {
     public static final int PHASE1_VERSION = 1;
 
     public static final Codec<CalicoWorldGenConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.INT.fieldOf("version").forGetter(CalicoWorldGenConfig::version),
             SelectedBiomeEntry.CODEC.listOf().fieldOf("selectedBiomes").forGetter(CalicoWorldGenConfig::selectedBiomes),
-            BiomeScale.CODEC.optionalFieldOf("biomeScale", BiomeScale.NORMAL).forGetter(CalicoWorldGenConfig::biomeScale)
+            BiomeScale.CODEC.optionalFieldOf("biomeScale", BiomeScale.NORMAL).forGetter(CalicoWorldGenConfig::biomeScale),
+            TerrainStyle.CODEC.optionalFieldOf("terrainStyle", TerrainStyle.NORMAL).forGetter(CalicoWorldGenConfig::terrainStyle)
     ).apply(instance, CalicoWorldGenConfig::new));
 
     public CalicoWorldGenConfig {
@@ -38,29 +45,53 @@ public record CalicoWorldGenConfig(int version, List<SelectedBiomeEntry> selecte
         if (biomeScale == null) {
             biomeScale = BiomeScale.NORMAL;
         }
+        if (terrainStyle == null) {
+            terrainStyle = TerrainStyle.NORMAL;
+        }
     }
 
     public static CalicoWorldGenConfig empty() {
-        return new CalicoWorldGenConfig(PHASE1_VERSION, List.of(), BiomeScale.NORMAL);
+        return new CalicoWorldGenConfig(PHASE1_VERSION, List.of(), BiomeScale.NORMAL, TerrainStyle.NORMAL);
     }
 
     public static CalicoWorldGenConfig of(List<SelectedBiomeEntry> biomes) {
-        return of(biomes, BiomeScale.NORMAL);
+        return of(biomes, BiomeScale.NORMAL, TerrainStyle.NORMAL);
     }
 
     public static CalicoWorldGenConfig of(List<SelectedBiomeEntry> biomes, BiomeScale scale) {
-        return new CalicoWorldGenConfig(PHASE1_VERSION, List.copyOf(biomes),
-                scale == null ? BiomeScale.NORMAL : scale);
+        return of(biomes, scale, TerrainStyle.NORMAL);
+    }
+
+    public static CalicoWorldGenConfig of(List<SelectedBiomeEntry> biomes, BiomeScale scale, TerrainStyle terrainStyle) {
+        return new CalicoWorldGenConfig(
+                PHASE1_VERSION,
+                List.copyOf(biomes),
+                scale == null ? BiomeScale.NORMAL : scale,
+                terrainStyle == null ? TerrainStyle.NORMAL : terrainStyle);
     }
 
     /** Copy with a different biome scale. */
     public CalicoWorldGenConfig withBiomeScale(BiomeScale scale) {
-        return new CalicoWorldGenConfig(version, selectedBiomes, scale == null ? BiomeScale.NORMAL : scale);
+        return new CalicoWorldGenConfig(
+                version,
+                selectedBiomes,
+                scale == null ? BiomeScale.NORMAL : scale,
+                terrainStyle);
+    }
+
+    /** Copy with a different terrain style. */
+    public CalicoWorldGenConfig withTerrainStyle(TerrainStyle style) {
+        return new CalicoWorldGenConfig(
+                version,
+                selectedBiomes,
+                biomeScale,
+                style == null ? TerrainStyle.NORMAL : style);
     }
 
     /**
      * Returns a config with non-finite / non-positive weights dropped and duplicate ids resolved (last wins).
-     * Preserves {@link #biomeScale()}. Does not validate emptiness — use {@link CalicoConfigValidation}.
+     * Preserves {@link #biomeScale()} and {@link #terrainStyle()}. Does not validate emptiness — use
+     * {@link CalicoConfigValidation}.
      */
     public CalicoWorldGenConfig sanitized() {
         Map<String, Double> merged = new LinkedHashMap<>();
@@ -78,6 +109,6 @@ public record CalicoWorldGenConfig(int version, List<SelectedBiomeEntry> selecte
         }
         List<SelectedBiomeEntry> out = new ArrayList<>(merged.size());
         merged.forEach((id, weight) -> out.add(new SelectedBiomeEntry(id, weight)));
-        return new CalicoWorldGenConfig(version, List.copyOf(out), biomeScale);
+        return new CalicoWorldGenConfig(version, List.copyOf(out), biomeScale, terrainStyle);
     }
 }

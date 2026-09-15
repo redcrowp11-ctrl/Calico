@@ -57,5 +57,20 @@
   "calico.screen.create.scale.normal": "Normal",
   "calico.screen.create.scale.quilt": "Quilt",
   "calico.screen.create.scale.normal.tooltip": "Vanilla-sized contiguous biomes (default). Uses only your selected biomes and weights.",
-  "calico.screen.create.scale.quilt.tooltip": "Tight patchwork micro-biomes a few blocks wide — the classic Calico quilt look."
+  "calico.screen.create.scale.quilt.tooltip": "Tight patchwork micro-biomes a few blocks wide — the classic Calico quilt look.",
+  "calico.screen.create.terrain": "Terrain",
+  "calico.screen.create.terrain.normal": "Normal",
+  "calico.screen.create.terrain.sky_islands": "Sky Islands",
+  "calico.screen.create.terrain.islands": "Islands",
+  "calico.screen.create.terrain.big_islands": "Big Islands",
+  "calico.screen.create.terrain.mountainous": "Mountainous",
+  "calico.screen.create.terrain.cave": "Cave",
+  "calico.screen.create.terrain.wedding_cake": "Wedding Cake",
+  "calico.screen.create.terrain.normal.tooltip": "Normal overworld terrain (default).",
+  "calico.screen.create.terrain.sky_islands.tooltip": "Floating landmasses high in the sky.",
+  "calico.screen.create.terrain.islands.tooltip": "Scattered ocean islands.",
+  "calico.screen.create.terrain.big_islands.tooltip": "Large continent-scale islands.",
+  "calico.screen.create.terrain.mountainous.tooltip": "Rugged high peaks and deep valleys.",
+  "calico.screen.create.terrain.cave.tooltip": "Vast underground cave worlds.",
+  "calico.screen.create.terrain.wedding_cake.tooltip": "Stacked strata, organic continuous voids, occasional column connectors."
 }
