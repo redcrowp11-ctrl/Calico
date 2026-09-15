@@ -71,6 +71,8 @@ public class CalicoCreateWorldScreen extends Screen {
     private Button createButton;
     /** Terrain CycleButton — Done reads getValue() so label never desyncs from packed id. */
     private CycleButton<TerrainStyle> terrainStyleButton;
+    /** Scale CycleButton — re-bound from selection on Filters return (same as Terrain). */
+    private CycleButton<BiomeScale> biomeScaleButton;
     private Button resetWeightButton;
     private WeightSlider weightSlider;
     private Component statusMessage = Component.empty();
@@ -245,7 +247,7 @@ public class CalicoCreateWorldScreen extends Screen {
                         (btn, value) -> this.selection.setTerrainStyle(value));
         addRenderableWidget(this.terrainStyleButton);
 
-        addRenderableWidget(CycleButton.<BiomeScale>builder(v -> Component.translatable(
+        this.biomeScaleButton = CycleButton.<BiomeScale>builder(v -> Component.translatable(
                         switch (v) {
                             case NORMAL -> "calico.screen.create.scale.normal";
                             case QUILT -> "calico.screen.create.scale.quilt";
@@ -258,7 +260,8 @@ public class CalicoCreateWorldScreen extends Screen {
                                 : "calico.screen.create.scale.normal.tooltip")))
                 .create(scaleX, scaleY, scaleW, BTN_H,
                         Component.translatable("calico.screen.create.scale"),
-                        (btn, value) -> this.selection.setBiomeScale(value)));
+                        (btn, value) -> this.selection.setBiomeScale(value));
+        addRenderableWidget(this.biomeScaleButton);
 
         this.listTop = Math.max(row2Y, scaleY) + BTN_H + GAP;
 
@@ -330,9 +333,15 @@ public class CalicoCreateWorldScreen extends Screen {
         updateUnavailableNote();
     }
 
-    /** Called when Filters screen closes — re-init will refresh list. */
+    /**
+     * Called when Filters screen closes — {@code setScreen(this)} then re-{@link #init()}.
+     * <p>
+     * Import/Load mutate the shared {@link #selection}; re-init rebinds Terrain/Scale
+     * CycleButtons via {@code withInitialValue(selection…)} so Done's button→selection
+     * force-sync cannot clobber an imported {@code terrainStyle}/{@code biomeScale}.
+     */
     void onFiltersClosed() {
-        // no-op; init() refreshes grid from preserved filter/selection state
+        // no-op; init() rebinds CycleButtons + grid from preserved selection/filter state
     }
 
     private void refreshGrid() {
@@ -418,9 +427,13 @@ public class CalicoCreateWorldScreen extends Screen {
     }
 
     private void onCreate() {
-        // Force-sync CycleButton → selection before pack (prevents label≠value / stale default).
+        // Force-sync CycleButtons → selection before pack (prevents label≠value / stale default).
+        // Safe after Filters import/load: init() rebound both buttons from selection.
         if (this.terrainStyleButton != null) {
             this.selection.setTerrainStyle(this.terrainStyleButton.getValue());
+        }
+        if (this.biomeScaleButton != null) {
+            this.selection.setBiomeScale(this.biomeScaleButton.getValue());
         }
         CalicoWorldGenConfig config = this.selection.toConfig();
         if (!CalicoWorldCreationBridge.submit(this.parent, config)) {

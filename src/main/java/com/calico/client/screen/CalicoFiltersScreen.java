@@ -1,5 +1,6 @@
 package com.calico.client.screen;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
@@ -11,6 +12,9 @@ import com.calico.client.data.BiomePresets;
 import com.calico.client.data.BiomeSelectionPersistence;
 import com.calico.client.data.BiomeSelectionState;
 import com.calico.client.data.BiomeTagClassifier;
+import com.calico.config.CalicoConfigFingerprint;
+import com.calico.config.CalicoWorldGenConfig;
+import com.calico.fun.FunTabStub;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -33,6 +37,12 @@ public class CalicoFiltersScreen extends Screen {
     private static final int BTN_H = 20;
     private static final int GAP = 6;
     private static final int MARGIN = 12;
+
+    /**
+     * Default style-preset file: {@code minecraft.gameDirectory/config/calico-style-preset.json}.
+     * Full create config (biomes, biomeScale, terrainStyle) via {@link ExportImportHelper}.
+     */
+    private static final String STYLE_PRESET_RELATIVE = "config/calico-style-preset.json";
 
     private final CalicoCreateWorldScreen parent;
     private final BiomeCatalog catalog;
@@ -141,9 +151,12 @@ public class CalicoFiltersScreen extends Screen {
         y += 4;
 
         y = addSection(y, "calico.screen.filters.section.data");
+        // Export/Import = clipboard; Save/Load = style-preset file (wraps to next row if narrow)
         addActionRow(x, y, maxX, List.of(
                 action("calico.screen.create.qol.export", this::doExport),
-                action("calico.screen.create.qol.import", this::doImport)
+                action("calico.screen.create.qol.import", this::doImport),
+                action("calico.screen.create.qol.save_file", this::doSaveFile),
+                action("calico.screen.create.qol.load_file", this::doLoadFile)
         ));
     }
 
@@ -232,9 +245,30 @@ public class CalicoFiltersScreen extends Screen {
         }));
     }
 
+    private Path stylePresetPath() {
+        return this.minecraft.gameDirectory.toPath().resolve(STYLE_PRESET_RELATIVE);
+    }
+
+    /** Status with terrainStyle, biome count, and config fingerprint (no world seed). */
+    private Component statusOk(String key, CalicoWorldGenConfig config) {
+        String styleId = FunTabStub.terrainStyleId(config.terrainStyle());
+        int biomes = config.selectedBiomes().size();
+        String fp = CalicoConfigFingerprint.fingerprint(config);
+        return Component.translatable(key, styleId, Integer.toString(biomes), fp);
+    }
+
+    private void applyLoadedConfig(CalicoWorldGenConfig parsed) {
+        this.selection.replaceFromConfig(parsed, this.catalog.presentIds());
+        CalicoWorldGenConfig applied = this.selection.toConfig();
+        BiomeSelectionPersistence.save(this.minecraft, applied);
+        this.parent.notifySelectionChangedFromFilters();
+        this.parent.updateUnavailableNoteFromFilters();
+    }
+
     private void doExport() {
-        ExportImportHelper.exportToClipboard(this.minecraft, this.selection.toConfig());
-        this.statusMessage = Component.translatable("calico.screen.create.export.ok");
+        CalicoWorldGenConfig config = this.selection.toConfig();
+        ExportImportHelper.exportToClipboard(this.minecraft, config);
+        this.statusMessage = statusOk("calico.screen.create.export.ok", config);
     }
 
     private void doImport() {
@@ -243,11 +277,28 @@ public class CalicoFiltersScreen extends Screen {
             this.statusMessage = Component.translatable("calico.screen.create.import.fail");
             return;
         }
-        this.selection.replaceFromConfig(parsed.get(), this.catalog.presentIds());
-        BiomeSelectionPersistence.save(this.minecraft, this.selection.toConfig());
-        this.parent.notifySelectionChangedFromFilters();
-        this.parent.updateUnavailableNoteFromFilters();
-        this.statusMessage = Component.translatable("calico.screen.create.import.ok");
+        applyLoadedConfig(parsed.get());
+        this.statusMessage = statusOk("calico.screen.create.import.ok", this.selection.toConfig());
+    }
+
+    private void doSaveFile() {
+        CalicoWorldGenConfig config = this.selection.toConfig();
+        try {
+            ExportImportHelper.writeToFile(stylePresetPath(), config);
+            this.statusMessage = statusOk("calico.screen.create.save.ok", config);
+        } catch (Exception ex) {
+            this.statusMessage = Component.translatable("calico.screen.create.save.fail");
+        }
+    }
+
+    private void doLoadFile() {
+        var parsed = ExportImportHelper.readFromFile(stylePresetPath());
+        if (parsed.isEmpty()) {
+            this.statusMessage = Component.translatable("calico.screen.create.load.fail");
+            return;
+        }
+        applyLoadedConfig(parsed.get());
+        this.statusMessage = statusOk("calico.screen.create.load.ok", this.selection.toConfig());
     }
 
     @Override
