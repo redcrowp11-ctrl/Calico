@@ -71,7 +71,7 @@ Shared API: `com.calico.config.CalicoConfigValidation#validateForCreate`
 5. Calico world-type Customize opens `CalicoCreateWorldScreen` (CycleButtons for biome scale + terrain style); selecting Calico with a pending config also auto-bakes into LevelStem on the create-world screen.
 6. `biomeScale` is baked into `WeightedBiomeSource` (codec field `biomeScale`) so Customize / reload preserves Normal vs Quilt.
 7. `terrainStyle` is baked into the overworld `NoiseBasedChunkGenerator` settings holder at create time via registry keys `calico:sky_islands` / `calico:wedding_cake` (not anonymous `Holder.direct`, so save/reload cannot silently become Normal).
-8. Create-world auto-bake re-applies whenever the overworld stem is still vanilla OVERWORLD while a custom terrainStyle is pending (world-type reset used to skip re-bake).
+8. Create-world auto-bake re-applies whenever the overworld stem is still vanilla OVERWORLD while a custom terrainStyle is pending (world-type reset used to skip re-bake). Re-bake also runs on screen init and every client tick while Create World is open on Calico, so Done→Create cannot keep OVERWORLD noise when pending is sky_islands / wedding_cake. Logs include the resolved `noiseSettings` key after apply. Orange "CALICO TERRAIN APPLIED" banner + toast confirm Done handoff.
 
 Java types:
 

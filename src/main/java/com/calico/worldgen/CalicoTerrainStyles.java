@@ -107,23 +107,30 @@ public final class CalicoTerrainStyles {
     static NoiseGeneratorSettings buildSkyIslandsSettings(HolderGetter<NormalNoise.NoiseParameters> noises) {
         DensityFunction islands2d = DensityFunctions.cache2d(archipelagoIslandSelector(noises));
         // Soft bulbous lens — long underside ramp (no pointed cones), rounded top
-        DensityFunction bellyFloor = DensityFunctions.yClampedGradient(52, 92, -1.0, 1.0);
-        DensityFunction bellyCeil = DensityFunctions.yClampedGradient(118, 152, 1.0, -1.0);
+        DensityFunction bellyFloor = DensityFunctions.yClampedGradient(48, 90, -1.0, 1.0);
+        DensityFunction bellyCeil = DensityFunctions.yClampedGradient(118, 158, 1.0, -1.0);
         DensityFunction lens = DensityFunctions.min(bellyFloor, bellyCeil);
-        // Mild horizontal-only nibble on surfaces — NOT 3D cheese (pencils / hanging spikes)
+        // Gate: ONLY positive island mask contributes. Additive islands2d*k previously overcame
+        // lens=-1 and filled full-height solid columns (read as desert floor + stone pillars).
+        DensityFunction landMask = DensityFunctions.max(islands2d, DensityFunctions.constant(0.0));
+        DensityFunction islandCore = DensityFunctions.mul(
+                DensityFunctions.add(lens, DensityFunctions.constant(0.20)),
+                DensityFunctions.mul(landMask, DensityFunctions.constant(1.85)));
         DensityFunction surfaceNibble = DensityFunctions.mul(
                 DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.85, 0.0),
-                DensityFunctions.constant(0.10));
+                DensityFunctions.mul(landMask, DensityFunctions.constant(0.12)));
         DensityFunction edgeWeather = DensityFunctions.mul(
                 DensityFunctions.noise(noises.getOrThrow(Noises.EROSION), 1.1, 0.0),
-                DensityFunctions.constant(0.08));
-        // islands2d positive on land; amplify so gaps stay void while island cores stay fat
+                DensityFunctions.mul(landMask, DensityFunctions.constant(0.08)));
+        // Constant void bias so gaps (mask=0) stay open air, never a continuous floor
         DensityFunction body = DensityFunctions.add(
-                DensityFunctions.add(lens, DensityFunctions.mul(islands2d, DensityFunctions.constant(1.65))),
-                DensityFunctions.add(surfaceNibble, edgeWeather));
+                DensityFunctions.add(islandCore, DensityFunctions.add(surfaceNibble, edgeWeather)),
+                DensityFunctions.constant(-0.22));
 
         DensityFunction finalDensity = postProcess(slideSky(body));
-        DensityFunction initial = slideSky(DensityFunctions.add(islands2d, DensityFunctions.constant(-0.35)));
+        DensityFunction initial = slideSky(DensityFunctions.add(
+                DensityFunctions.mul(landMask, DensityFunctions.constant(0.55)),
+                DensityFunctions.constant(-0.40)));
 
         NoiseRouter router = new NoiseRouter(
                 DensityFunctions.zero(),
@@ -149,9 +156,9 @@ public final class CalicoTerrainStyles {
                 router,
                 net.minecraft.data.worldgen.SurfaceRuleData.overworldLike(false, false, false),
                 List.of(),
-                -64,
+                -64, // sea below world → no ocean flood; voids stay open
                 false,
-                false,
+                false, // aquifers off
                 false,
                 false);
     }
@@ -159,19 +166,18 @@ public final class CalicoTerrainStyles {
     /**
      * 2D archipelago selector: large islands (low-frequency continental blobs) with neighbors
      * visible within normal explore/render distance — not End solitude.
+     * Positive ≈ land core; non-positive ≈ void gap (gated by max(.,0) in body).
      */
     private static DensityFunction archipelagoIslandSelector(HolderGetter<NormalNoise.NoiseParameters> noises) {
-        // Lower xz scale → larger islands. ~0.28–0.40 keeps big landmasses with nearby neighbors.
-        DensityFunction primary = DensityFunctions.noise(noises.getOrThrow(Noises.CONTINENTALNESS), 0.32, 0.0);
-        DensityFunction secondary = DensityFunctions.noise(noises.getOrThrow(Noises.EROSION), 0.48, 0.0);
-        DensityFunction detail = DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.95, 0.0);
+        DensityFunction primary = DensityFunctions.noise(noises.getOrThrow(Noises.CONTINENTALNESS), 0.30, 0.0);
+        DensityFunction secondary = DensityFunctions.noise(noises.getOrThrow(Noises.EROSION), 0.45, 0.0);
+        DensityFunction detail = DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.90, 0.0);
         DensityFunction blended = DensityFunctions.add(
-                DensityFunctions.mul(primary, DensityFunctions.constant(1.05)),
+                DensityFunctions.mul(primary, DensityFunctions.constant(1.00)),
                 DensityFunctions.add(
-                        DensityFunctions.mul(secondary, DensityFunctions.constant(0.38)),
-                        DensityFunctions.mul(detail, DensityFunctions.constant(0.12))));
-        // Slight land bias so islands are generous in size while gaps still open between them
-        return DensityFunctions.add(blended, DensityFunctions.constant(0.08));
+                        DensityFunctions.mul(secondary, DensityFunctions.constant(0.35)),
+                        DensityFunctions.mul(detail, DensityFunctions.constant(0.10))));
+        return DensityFunctions.add(blended, DensityFunctions.constant(0.02));
     }
 
     /** Gentle vertical slide for sky band — softer than End so undersides stay bulbous. */
@@ -299,17 +305,21 @@ public final class CalicoTerrainStyles {
      */
     private static DensityFunction weddingCakeLayerBands(
             DensityFunction warp, HolderGetter<NormalNoise.NoiseParameters> noises) {
+        // Amped terrain noise on lowest plate — playtests still read as billiard-table above void seal
         DensityFunction bottomRough = DensityFunctions.add(
                 warp,
                 DensityFunctions.add(
                         DensityFunctions.mul(
-                                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.22, 0.0),
-                                DensityFunctions.constant(1.15)),
-                        DensityFunctions.mul(
-                                DensityFunctions.noise(noises.getOrThrow(Noises.JAGGED), 0.40, 0.0),
-                                DensityFunctions.constant(0.70))));
-        // Wider soft shells + uneven thicknesses — weathered arches, not CAD slabs
-        DensityFunction l1 = warpedBand(12, 9, 22, bottomRough);  // rough bottom plate above void
+                                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.18, 0.0),
+                                DensityFunctions.constant(2.55)),
+                        DensityFunctions.add(
+                                DensityFunctions.mul(
+                                        DensityFunctions.noise(noises.getOrThrow(Noises.JAGGED), 0.35, 0.0),
+                                        DensityFunctions.constant(1.65)),
+                                DensityFunctions.mul(
+                                        DensityFunctions.noise(noises.getOrThrow(Noises.EROSION), 0.55, 0.0),
+                                        DensityFunctions.constant(1.10)))));
+        DensityFunction l1 = warpedBand(14, 11, 28, bottomRough);  // thick rough bottom plate above void
         DensityFunction l2 = warpedBand(68, 6, 17, warp);
         DensityFunction l3 = warpedBand(118, 5, 16, warp);
         DensityFunction l4 = warpedBand(162, 6, 15, warp);
@@ -332,27 +342,29 @@ public final class CalicoTerrainStyles {
     }
 
     /**
-     * Sparse FAT mega dripstone trunks only — high thickness + harsh fringe gate kills pencil spikes.
+     * Sparse FAT mega dripstone trunks — footprint varies with Y so shafts do not keep the
+     * same cross-section through the whole stack. Organic skirts; harsh fringe gate kills pencils.
      */
     private static DensityFunction sparseMegaColumns(HolderGetter<NormalNoise.NoiseParameters> noises) {
-        // Low xz scale → wide trunks; very low y scale → tall continuity
-        DensityFunction pillar = DensityFunctions.noise(noises.getOrThrow(Noises.PILLAR), 1.85, 0.045);
+        // Higher y_scale → hole/shaft shape changes per layer instead of a uniform drill
+        DensityFunction pillar = DensityFunctions.noise(noises.getOrThrow(Noises.PILLAR), 1.85, 0.28);
         DensityFunction rarity = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_RARENESS), 0.0, -3.85);
-        // High min thickness → true mega trunks, not skinny pencils
         DensityFunction thickness = DensityFunctions.mappedNoise(noises.getOrThrow(Noises.PILLAR_THICKNESS), 2.35, 4.8);
+        DensityFunction layerWobble = DensityFunctions.mul(
+                DensityFunctions.noise(noises.getOrThrow(Noises.EROSION), 0.55, 0.40),
+                DensityFunctions.constant(0.55));
         DensityFunction shaped = DensityFunctions.add(
                 DensityFunctions.mul(pillar, DensityFunctions.constant(3.4)),
-                rarity);
+                DensityFunctions.add(rarity, layerWobble));
         DensityFunction body = DensityFunctions.mul(shaped, thickness.cube());
         DensityFunction skirt = DensityFunctions.mul(
-                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.75, 0.0),
-                DensityFunctions.constant(0.42));
+                DensityFunctions.noise(noises.getOrThrow(Noises.SURFACE), 0.65, 0.12),
+                DensityFunctions.constant(0.58));
         DensityFunction jaggedSkirt = DensityFunctions.mul(
-                DensityFunctions.noise(noises.getOrThrow(Noises.JAGGED), 0.50, 0.0),
-                DensityFunctions.constant(0.28));
+                DensityFunctions.noise(noises.getOrThrow(Noises.JAGGED), 0.45, 0.20),
+                DensityFunctions.constant(0.40));
         DensityFunction raw = DensityFunctions.cacheOnce(
                 DensityFunctions.add(body, DensityFunctions.add(skirt, jaggedSkirt)));
-        // Harsh negative gate — thin fringes / pencil spikes go negative and disappear
         return DensityFunctions.add(raw, DensityFunctions.constant(-0.55));
     }
 

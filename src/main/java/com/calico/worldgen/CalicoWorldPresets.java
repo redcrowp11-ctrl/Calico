@@ -136,10 +136,23 @@ public final class CalicoWorldPresets {
                             noiseSettings.getOrThrow(NoiseGeneratorSettings.NETHER)));
         });
 
+        String noiseKey = overworldNoise.unwrapKey()
+                .map(k -> k.location().toString())
+                .orElseGet(() -> "direct(seaLevel=" + overworldNoise.value().seaLevel()
+                        + ",aquifers=" + overworldNoise.value().isAquifersEnabled() + ")");
         Calico.LOGGER.info(
-                "Calico: applied create-time config to Overworld LevelStem ({} biomes, terrainStyle={})",
+                "Calico: applied create-time config to Overworld LevelStem ({} biomes, terrainStyle={}, noiseSettings={})",
                 overworldSource.entries().size(),
-                config.terrainStyle() == null ? "normal" : config.terrainStyle().serializedName());
+                config.terrainStyle() == null ? "normal" : config.terrainStyle().serializedName(),
+                noiseKey);
+        if (config.terrainStyle() == com.calico.config.TerrainStyle.SKY_ISLANDS
+                && overworldNoise.is(NoiseGeneratorSettings.OVERWORLD)) {
+            Calico.LOGGER.error("Calico: sky_islands resolve produced OVERWORLD — create path will look like solid overworld");
+        }
+        if (config.terrainStyle() == com.calico.config.TerrainStyle.WEDDING_CAKE
+                && overworldNoise.is(NoiseGeneratorSettings.OVERWORLD)) {
+            Calico.LOGGER.error("Calico: wedding_cake resolve produced OVERWORLD — create path will look like solid overworld");
+        }
         return new WorldDimensions(map);
     }
 

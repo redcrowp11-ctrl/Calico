@@ -8,15 +8,17 @@ import com.calico.config.CalicoCreateTimeConfig;
 import com.calico.config.CalicoWorldGenConfig;
 import com.calico.config.TerrainStyle;
 import com.calico.worldgen.CalicoCreateWorldBridge;
+import com.calico.worldgen.CalicoTerrainStyles;
 import com.calico.worldgen.CalicoWorldPresets;
 import com.calico.worldgen.WeightedBiomeSource;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.toasts.SystemToast;
-import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.core.Holder;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
@@ -26,6 +28,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterPresetEditorsEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -34,12 +37,18 @@ import net.neoforged.neoforge.common.NeoForge;
  * Client-side entry: registers the Calico create-world biome picker and bakes
  * pending create-time config into LevelStem when the Calico world type is selected.
  * <p>
- * Hook: NeoForge {@link RegisterPresetEditorsEvent} — no mixin required.
+ * Done→Create bake contract: Customize Done writes pending + apply(); world-type
+ * select can reset LevelStem to datapack OVERWORLD; we re-bake on init, on uiState
+ * change, and every client tick while Create World is open so noise settings cannot
+ * stay OVERWORLD when pending terrainStyle is sky_islands / wedding_cake.
  */
 @Mod(value = Calico.MOD_ID, dist = Dist.CLIENT)
 public class CalicoClient {
     /** Guard against recursive uiState listener updates when applying LevelStem. */
     private static boolean applyingCreateTimeConfig;
+
+    /** Avoid stacking duplicate uiState listeners on the same CreateWorldScreen instance. */
+    private static CreateWorldScreen hookedScreen;
 
     /** Shown on CreateWorldScreen after Customize Done — proves terrainStyle handoff. */
     private static Component createConfirmMessage = Component.empty();
@@ -64,36 +73,30 @@ public class CalicoClient {
         modEventBus.addListener(this::onRegisterPresetEditors);
         NeoForge.EVENT_BUS.addListener(CalicoClient::onScreenInit);
         NeoForge.EVENT_BUS.addListener(CalicoClient::onScreenRender);
+        NeoForge.EVENT_BUS.addListener(CalicoClient::onClientTick);
     }
 
     private void onClientSetup(FMLClientSetupEvent event) {
         Calico.LOGGER.debug("Calico client setup");
     }
 
-    /**
-     * Opens {@link CalicoCreateWorldScreen} when the player clicks Customize on the
-     * {@code calico:calico} world preset in create-world.
-     */
     private void onRegisterPresetEditors(RegisterPresetEditorsEvent event) {
         event.register(CalicoWorldPresets.CALICO, CalicoCreateWorldScreen::create);
         Calico.LOGGER.info("Calico: registered create-world biome picker for preset {}",
                 CalicoWorldPresets.CALICO.location());
     }
 
-    /**
-     * When create-world is open on the Calico world type, ensure pending create-time config
-     * (Customize Done, or last-selection JSON) is baked into LevelStem.
-     * <p>
-     * Root-cause fix for terrainStyle bake miss: world-type selection resets dimensions to the
-     * datapack preset (plains + OVERWORLD). A fingerprint short-circuit previously skipped
-     * re-bake after that reset, so Sky Islands + Done could still spawn vanilla plains.
-     * Always re-apply when the overworld stem does not yet match the pending config.
-     */
     private static void onScreenInit(ScreenEvent.Init.Post event) {
         if (!(event.getScreen() instanceof CreateWorldScreen createWorldScreen)) {
             return;
         }
         ensurePendingFromPersistence(createWorldScreen);
+        tryBake(createWorldScreen, "screen-init");
+
+        if (hookedScreen == createWorldScreen) {
+            return;
+        }
+        hookedScreen = createWorldScreen;
         createWorldScreen.getUiState().addListener(state -> {
             if (applyingCreateTimeConfig) {
                 return;
@@ -102,37 +105,75 @@ public class CalicoClient {
             if (preset == null || !preset.is(CalicoWorldPresets.CALICO)) {
                 return;
             }
-            ensurePendingFromPersistence(createWorldScreen);
-            if (!CalicoCreateWorldBridge.hasValidPending()) {
-                return;
-            }
-            CalicoWorldGenConfig config = CalicoCreateTimeConfig.peekValidPending().orElse(null);
-            if (config == null) {
-                return;
-            }
-            if (!needsBake(state.getSettings().selectedDimensions().overworld(), config)) {
-                return;
-            }
-            long seed = state.getSettings().options().seed();
-            applyingCreateTimeConfig = true;
-            try {
-                state.updateDimensions((registries, dimensions) ->
-                        CalicoWorldPresets.applyCreateTimeConfig(registries, dimensions, config, seed));
-                Calico.LOGGER.info(
-                        "Calico: auto-baked create-time LevelStem (terrainStyle={}, biomes={})",
-                        config.terrainStyle() == null ? "normal" : config.terrainStyle().serializedName(),
-                        config.selectedBiomes().size());
-            } catch (IllegalArgumentException ex) {
-                Calico.LOGGER.warn("Calico: failed to apply create-time config to LevelStem: {}", ex.getMessage());
-            } finally {
-                applyingCreateTimeConfig = false;
-            }
+            tryBake(createWorldScreen, "ui-listener");
         });
     }
 
     /**
-     * Session restart clears in-memory pending; last Customize selection still lives on disk.
-     * Hydrate pending so Calico world-type select cannot ignore terrainStyle.
+     * Continuous heal: world-type / datapack reset can wipe noise settings after Done.
+     * Keep overworld stem matched to pending terrainStyle until the player leaves Create World.
+     */
+    private static void onClientTick(ClientTickEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || !(mc.screen instanceof CreateWorldScreen createWorldScreen)) {
+            return;
+        }
+        Holder<WorldPreset> preset = createWorldScreen.getUiState().getWorldType().preset();
+        if (preset == null || !preset.is(CalicoWorldPresets.CALICO)) {
+            return;
+        }
+        tryBake(createWorldScreen, "client-tick");
+    }
+
+    private static void tryBake(CreateWorldScreen createWorldScreen, String reason) {
+        if (applyingCreateTimeConfig) {
+            return;
+        }
+        ensurePendingFromPersistence(createWorldScreen);
+        if (!CalicoCreateWorldBridge.hasValidPending()) {
+            return;
+        }
+        CalicoWorldGenConfig config = CalicoCreateTimeConfig.peekValidPending().orElse(null);
+        if (config == null) {
+            return;
+        }
+        Holder<WorldPreset> preset = createWorldScreen.getUiState().getWorldType().preset();
+        if (preset == null || !preset.is(CalicoWorldPresets.CALICO)) {
+            return;
+        }
+        ChunkGenerator overworld = createWorldScreen.getUiState().getSettings().selectedDimensions().overworld();
+        if (!needsBake(overworld, config)) {
+            return;
+        }
+        long seed = createWorldScreen.getUiState().getSettings().options().seed();
+        applyingCreateTimeConfig = true;
+        try {
+            createWorldScreen.getUiState().updateDimensions((registries, dimensions) ->
+                    CalicoWorldPresets.applyCreateTimeConfig(registries, dimensions, config, seed));
+            ChunkGenerator baked = createWorldScreen.getUiState().getSettings().selectedDimensions().overworld();
+            String noiseKey = describeNoiseSettings(baked);
+            Calico.LOGGER.info(
+                    "Calico: auto-baked LevelStem via {} (terrainStyle={}, biomes={}, noiseSettings={})",
+                    reason,
+                    config.terrainStyle() == null ? "normal" : config.terrainStyle().serializedName(),
+                    config.selectedBiomes().size(),
+                    noiseKey);
+            if (isCustomTerrain(config.terrainStyle())
+                    && baked instanceof NoiseBasedChunkGenerator ng
+                    && ng.stable(NoiseGeneratorSettings.OVERWORLD)) {
+                Calico.LOGGER.error(
+                        "Calico: BAKE FAILED — pending terrainStyle={} but overworld stem still OVERWORLD after apply",
+                        config.terrainStyle().serializedName());
+            }
+        } catch (IllegalArgumentException ex) {
+            Calico.LOGGER.warn("Calico: failed to apply create-time config to LevelStem: {}", ex.getMessage());
+        } finally {
+            applyingCreateTimeConfig = false;
+        }
+    }
+
+    /**
+     * Does NOT overwrite an already-valid in-memory pending (Done always wins over disk).
      */
     private static void ensurePendingFromPersistence(CreateWorldScreen screen) {
         if (CalicoCreateWorldBridge.hasValidPending()) {
@@ -154,27 +195,33 @@ public class CalicoClient {
     }
 
     /**
-     * Returns true when overworld stem still looks like the datapack placeholder (or otherwise
-     * does not reflect pending biomes / terrainStyle) — create path must not ignore style.
+     * Returns true when overworld stem does not yet reflect pending biomes / terrainStyle.
+     * <p>
+     * <b>PROOF — needsBake cannot skip sky/cake while stem is still OVERWORLD:</b>
+     * when pending style is {@link TerrainStyle#SKY_ISLANDS} or {@link TerrainStyle#WEDDING_CAKE}
+     * and {@code noiseGen.stable(OVERWORLD)} is true, the customTerrain branch returns
+     * {@code true}. Style-specific branches also return {@code true} unless the stem is
+     * {@code stable(calico:sky_islands)} / {@code stable(calico:wedding_cake)} (or a clear
+     * Holder.direct heuristic). A datapack/world-type reset that leaves OVERWORLD always
+     * forces re-bake.
      */
-    private static boolean needsBake(ChunkGenerator overworld, CalicoWorldGenConfig config) {
+    static boolean needsBake(ChunkGenerator overworld, CalicoWorldGenConfig config) {
         if (!(overworld instanceof NoiseBasedChunkGenerator noiseGen)) {
             return true;
         }
         TerrainStyle style = config.terrainStyle() == null ? TerrainStyle.NORMAL : config.terrainStyle();
-        boolean customTerrain = style != TerrainStyle.NORMAL
-                && style != TerrainStyle.ISLANDS
-                && style != TerrainStyle.BIG_ISLANDS
-                && style != TerrainStyle.MOUNTAINOUS
-                && style != TerrainStyle.CAVE;
-        // Datapack preset / world-type reset leaves vanilla OVERWORLD noise — that is the bake miss.
-        if (customTerrain && noiseGen.stable(NoiseGeneratorSettings.OVERWORLD)) {
+        // PROOF: custom style + stable(OVERWORLD) ⇒ true (cannot skip).
+        if (isCustomTerrain(style) && noiseGen.stable(NoiseGeneratorSettings.OVERWORLD)) {
             return true;
         }
-        if (style == TerrainStyle.SKY_ISLANDS && !noiseGen.stable(com.calico.worldgen.CalicoTerrainStyles.SKY_ISLANDS)) {
+        if (style == TerrainStyle.SKY_ISLANDS
+                && !noiseGen.stable(CalicoTerrainStyles.SKY_ISLANDS)
+                && !looksLikeSkyIslands(noiseGen)) {
             return true;
         }
-        if (style == TerrainStyle.WEDDING_CAKE && !noiseGen.stable(com.calico.worldgen.CalicoTerrainStyles.WEDDING_CAKE)) {
+        if (style == TerrainStyle.WEDDING_CAKE
+                && !noiseGen.stable(CalicoTerrainStyles.WEDDING_CAKE)
+                && !looksLikeWeddingCake(noiseGen)) {
             return true;
         }
         if (!(noiseGen.getBiomeSource() instanceof WeightedBiomeSource)) {
@@ -183,7 +230,37 @@ public class CalicoClient {
         return false;
     }
 
-    /** Draws Done confirm banner on create-world so terrainStyle handoff is visible. */
+    private static boolean isCustomTerrain(TerrainStyle style) {
+        return style == TerrainStyle.SKY_ISLANDS || style == TerrainStyle.WEDDING_CAKE;
+    }
+
+    private static boolean looksLikeSkyIslands(NoiseBasedChunkGenerator noiseGen) {
+        NoiseGeneratorSettings s = noiseGen.generatorSettings().value();
+        return s.seaLevel() < 0 && !s.isAquifersEnabled() && s.noiseSettings().minY() >= 0
+                && !noiseGen.stable(NoiseGeneratorSettings.OVERWORLD);
+    }
+
+    private static boolean looksLikeWeddingCake(NoiseBasedChunkGenerator noiseGen) {
+        NoiseGeneratorSettings s = noiseGen.generatorSettings().value();
+        return s.seaLevel() < 0 && !s.isAquifersEnabled() && s.noiseSettings().minY() < 0
+                && !noiseGen.stable(NoiseGeneratorSettings.OVERWORLD);
+    }
+
+    private static String describeNoiseSettings(ChunkGenerator overworld) {
+        if (!(overworld instanceof NoiseBasedChunkGenerator noiseGen)) {
+            return overworld.getClass().getSimpleName();
+        }
+        Holder<NoiseGeneratorSettings> holder = noiseGen.generatorSettings();
+        return holder.unwrapKey()
+                .map(ResourceKey::location)
+                .map(Object::toString)
+                .orElseGet(() -> "direct(seaLevel=" + holder.value().seaLevel()
+                        + ",aquifers=" + holder.value().isAquifersEnabled()
+                        + ",minY=" + holder.value().noiseSettings().minY()
+                        + ",height=" + holder.value().noiseSettings().height() + ")");
+    }
+
+    /** Full-width Done confirm banner on create-world so terrainStyle handoff is visible. */
     private static void onScreenRender(ScreenEvent.Render.Post event) {
         if (!(event.getScreen() instanceof CreateWorldScreen screen)) {
             return;
