@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 
 import com.calico.Calico;
+import com.calico.config.CalicoConfigFingerprint;
 import com.calico.config.CalicoConfigValidation;
 import com.calico.config.CalicoCreateTimeConfig;
 import com.calico.config.CalicoWorldGenConfig;
@@ -37,6 +38,7 @@ public final class CalicoCreateWorldBridge {
         CalicoWorldGenConfig sanitized = result.sanitized();
         CalicoCreateTimeConfig.setPending(sanitized);
         Calico.LOGGER.info("Calico: create-time config submitted ({} biomes)", sanitized.selectedBiomes().size());
+        Calico.LOGGER.info("Calico: determinism stamp {}", CalicoConfigFingerprint.stamp(worldSeed, sanitized));
         return (registries, dimensions) ->
                 CalicoWorldPresets.applyCreateTimeConfig(registries, dimensions, sanitized, worldSeed);
     }

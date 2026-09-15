@@ -52,7 +52,16 @@ Other runs: `runServer`, `runData` (datagen for the Calico world preset).
 
 ## Config
 
-See **[CONFIG.md](CONFIG.md)** for the locked JSON schema (`version`, `selectedBiomes[{id,weight}]`).
+See **[CONFIG.md](CONFIG.md)** for the locked JSON schema (`version`, `selectedBiomes[{id,weight}]`, `biomeScale`, `terrainStyle`).
+
+### Style presets + determinism
+
+- Customize **Export / Import** copies the full create config (biomes, weights, biome scale, terrain style) to/from the clipboard; file round-trip via `ExportImportHelper.writeToFile` / `readFromFile`.
+- World create / bake logs a **determinism stamp** (`seed` + config fingerprint) for bug reports — see CONFIG.md.
+
+### Safe spawn
+
+Dangerous terrain styles (sky islands, wedding cake, ant hill, islands, caves, …) search for a solid standing spot near world spawn (platform only as last resort). Normal overworld spawn is unchanged.
 
 ## License
 

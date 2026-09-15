@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 
 import com.calico.worldgen.BiomeRegistryDiscovery;
 import com.calico.worldgen.CalicoBiomeSources;
+import com.calico.worldgen.CalicoSpawnEvents;
 import com.calico.worldgen.CalicoWorldPresets;
 import com.mojang.logging.LogUtils;
 
@@ -30,10 +31,11 @@ public class Calico {
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(this::gatherData);
         NeoForge.EVENT_BUS.register(this);
+        NeoForge.EVENT_BUS.register(CalicoSpawnEvents.class);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        LOGGER.info("Calico loaded — weighted biomes + terrain styles (Phase 2) ready");
+        LOGGER.info("Calico loaded — weighted biomes + terrain styles + safe spawn (Phase 2) ready");
     }
 
     private void gatherData(GatherDataEvent event) {

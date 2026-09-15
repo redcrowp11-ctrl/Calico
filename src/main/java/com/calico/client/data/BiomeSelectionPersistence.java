@@ -24,7 +24,8 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
 /**
- * Persists last biome selection under the game dir using the locked JSON schema.
+ * Persists last create config under the game dir using the locked JSON schema
+ * ({@code version}, {@code selectedBiomes}, {@code biomeScale}, {@code terrainStyle}).
  * File: {@code config/calico-last-selection.json}
  */
 @OnlyIn(Dist.CLIENT)

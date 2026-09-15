@@ -1,5 +1,11 @@
 package com.calico.client.screen;
 
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -17,7 +23,10 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
 /**
- * Clipboard JSON export/import using locked {@link CalicoWorldGenConfig#CODEC}.
+ * Clipboard + file JSON export/import using locked {@link CalicoWorldGenConfig#CODEC}.
+ * <p>
+ * Round-trips the full create config: {@code version}, {@code selectedBiomes[{id,weight}]},
+ * {@code biomeScale}, {@code terrainStyle} (CONFIG.md schema).
  */
 @OnlyIn(Dist.CLIENT)
 public final class ExportImportHelper {
@@ -40,6 +49,34 @@ public final class ExportImportHelper {
     public static Optional<CalicoWorldGenConfig> importFromClipboard(Minecraft minecraft) {
         String text = minecraft.keyboardHandler.getClipboard();
         return parse(text);
+    }
+
+    /**
+     * Writes the full create config JSON to {@code path} (creates parent dirs).
+     * Compatible with {@link com.calico.client.data.BiomeSelectionPersistence} schema.
+     */
+    public static void writeToFile(Path path, CalicoWorldGenConfig config) throws IOException {
+        Files.createDirectories(path.getParent() == null ? Path.of(".") : path.getParent());
+        JsonElement element = CalicoWorldGenConfig.CODEC.encodeStart(JsonOps.INSTANCE, config.sanitized())
+                .getOrThrow();
+        try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+            GSON.toJson(element, writer);
+        }
+    }
+
+    /** Reads a full create config JSON file (version/biomes/biomeScale/terrainStyle). */
+    public static Optional<CalicoWorldGenConfig> readFromFile(Path path) {
+        if (!Files.isRegularFile(path)) {
+            return Optional.empty();
+        }
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            JsonElement element = JsonParser.parseReader(reader);
+            return CalicoWorldGenConfig.CODEC.parse(JsonOps.INSTANCE, element)
+                    .resultOrPartial(msg -> LOGGER.warn("Calico: preset file JSON invalid: {}", msg));
+        } catch (Exception ex) {
+            LOGGER.warn("Calico: could not read preset file {}", path, ex);
+            return Optional.empty();
+        }
     }
 
     public static Optional<CalicoWorldGenConfig> parse(String text) {

@@ -83,5 +83,40 @@ Java types:
 - `com.calico.worldgen.CalicoTerrainStyles` — style → `NoiseGeneratorSettings` resolver
 - Mojang `Codec`s on config types for JSON (de)serialization
 
+## Export / import (style presets)
+
+Clipboard **Export** / **Import** (Filters → Data) and file round-trip helpers serialize the **full** create config via `CalicoWorldGenConfig.CODEC`:
+
+- `version`, `selectedBiomes[{id,weight}]`, `biomeScale`, `terrainStyle`
+
+Same schema as last-selection persistence (`config/calico-last-selection.json`).
+
+Java helpers:
+
+- `com.calico.client.screen.ExportImportHelper` — clipboard + `writeToFile` / `readFromFile`
+- `com.calico.client.data.BiomeSelectionPersistence` — last-selection file under the game dir
+
+Omitted `biomeScale` / `terrainStyle` on import default to `normal` (additive, backward compatible).
+
+## Determinism stamp
+
+On create-time submit / LevelStem bake, Calico logs a short stamp for bug reports:
+
+```
+Calico: determinism stamp seed=<worldSeed> config=<16-hex> (style=…, scale=…, biomes=N)
+```
+
+`config` is a stable SHA-256 fingerprint of sanitized biomes + weights + `biomeScale` + `terrainStyle` (`com.calico.config.CalicoConfigFingerprint`). Same inputs ⇒ same fingerprint.
+
+## Safe spawn (dangerous terrain)
+
+For Calico overworld stems with **custom** `terrainStyle` (anything ≠ `normal` / non-`OVERWORLD` noise — including `sky_islands`, `wedding_cake`, `ant_hill`, `islands`, `big_islands`, `cave`, `mountainous`):
+
+1. On world create (`LevelEvent.CreateSpawnPosition`), search near noise-sampler spawn for a solid top surface with air above (deterministic from world seed).
+2. Place a small platform only if no natural spot is found within the search spiral.
+3. On first join, repair unsafe landings (void / air / lava) and teleport once.
+
+**Normal** overworld terrain is unchanged (vanilla spawn logic).
+
 Do **not** rename locked JSON keys (`version`, `selectedBiomes`, `id`, `weight`) in Phase 1.
 `biomeScale` and `terrainStyle` are additive; existing configs without them default to normal.

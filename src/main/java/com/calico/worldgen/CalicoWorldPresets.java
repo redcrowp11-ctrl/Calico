@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.calico.Calico;
+import com.calico.config.CalicoConfigFingerprint;
 import com.calico.config.CalicoCreateTimeConfig;
 import com.calico.config.CalicoWorldGenConfig;
 
@@ -145,6 +146,7 @@ public final class CalicoWorldPresets {
                 overworldSource.entries().size(),
                 config.terrainStyle() == null ? "normal" : config.terrainStyle().serializedName(),
                 noiseKey);
+        Calico.LOGGER.info("Calico: determinism stamp {}", CalicoConfigFingerprint.stamp(worldSeed, config));
         var style = config.terrainStyle();
         if (style != null && style.isCustomTerrain() && overworldNoise.is(NoiseGeneratorSettings.OVERWORLD)) {
             Calico.LOGGER.error(
