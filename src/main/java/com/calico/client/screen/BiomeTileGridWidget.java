@@ -19,13 +19,15 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
 /**
- * Virtualized tile grid: each list row holds {@link #COLUMNS} biome tiles.
- * Only visible rows are rendered (AbstractSelectionList / ObjectSelectionList).
+ * Virtualized tile grid: each list row holds up to {@link #maxColumns()} biome tiles.
+ * Prefer 2 columns when wide enough; otherwise 1. Two-line tiles for name + weight.
  */
 @OnlyIn(Dist.CLIENT)
 public class BiomeTileGridWidget extends ObjectSelectionList<BiomeTileGridWidget.Row> {
-    public static final int COLUMNS = 3;
-    public static final int ROW_HEIGHT = 28;
+    /** Prefer 2 columns when list width is at least this many pixels. */
+    public static final int TWO_COLUMN_MIN_WIDTH = 400;
+    /** Two-line tiles: display name + weight/id line. */
+    public static final int ROW_HEIGHT = 36;
 
     private final BiomeSelectionState selection;
     private final Consumer<BiomeEntry> onTileInteract;
@@ -43,19 +45,48 @@ public class BiomeTileGridWidget extends ObjectSelectionList<BiomeTileGridWidget
         this.onTileInteract = onTileInteract;
     }
 
-    @Override
-    public int getRowWidth() {
-        return Math.max(220, this.width - 20);
+    /** 2 columns when width ≥ ~400px, else 1. */
+    public int maxColumns() {
+        return this.width >= TWO_COLUMN_MIN_WIDTH ? 2 : 1;
     }
 
+    @Override
+    public int getRowWidth() {
+        return Math.max(180, this.width - 12);
+    }
+
+    /**
+     * Rebuild rows from the visible biome list. Preserves scroll when the id sequence
+     * is unchanged (e.g. caller rebuilds unnecessarily).
+     */
     public void setVisibleBiomes(List<BiomeEntry> biomes) {
+        double priorScroll = this.getScrollAmount();
+        boolean sameOrder = sameBiomeIds(this.visible, biomes);
         this.visible = List.copyOf(biomes);
+        if (sameOrder && !this.children().isEmpty()) {
+            // Entry list already matches — skip replaceEntries to keep scroll/selection stable.
+            return;
+        }
+        int cols = maxColumns();
         List<Row> rows = new ArrayList<>();
-        for (int i = 0; i < biomes.size(); i += COLUMNS) {
-            int end = Math.min(i + COLUMNS, biomes.size());
+        for (int i = 0; i < biomes.size(); i += cols) {
+            int end = Math.min(i + cols, biomes.size());
             rows.add(new Row(biomes.subList(i, end)));
         }
         this.replaceEntries(rows);
+        this.setScrollAmount(priorScroll);
+    }
+
+    private static boolean sameBiomeIds(List<BiomeEntry> a, List<BiomeEntry> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (!a.get(i).id().equals(b.get(i).id())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public List<BiomeEntry> visibleBiomes() {
@@ -90,7 +121,10 @@ public class BiomeTileGridWidget extends ObjectSelectionList<BiomeTileGridWidget
                 int mouseY,
                 boolean hovering,
                 float partialTick) {
-            int tileW = Math.max(40, (width - 4) / COLUMNS);
+            int cols = Math.max(1, maxColumns());
+            int tileW = Math.max(80, (width - 4) / cols);
+            var font = BiomeTileGridWidget.this.minecraft.font;
+
             for (int i = 0; i < tiles.size(); i++) {
                 BiomeEntry entry = tiles.get(i);
                 int tx = left + i * tileW;
@@ -107,20 +141,22 @@ public class BiomeTileGridWidget extends ObjectSelectionList<BiomeTileGridWidget
                 }
 
                 String check = selected ? "[x] " : "[ ] ";
-                String label = check + entry.displayName().getString();
+                String name = check + entry.displayName().getString();
+                int textBudget = tileW - 10;
+                graphics.drawString(font, truncate(name, textBudget), tx + 4, ty + 4, 0xFFFFFF);
+
+                // Second line: relative % when selected; otherwise muted biome path hint when space allows
                 if (selected) {
                     double pct = selection.relativePercent(entry.id());
-                    label = label + " (" + Mth.floor(pct) + "%)";
+                    String pctLabel = Mth.floor(pct) + "%";
+                    int pctW = font.width(pctLabel);
+                    graphics.drawString(font, pctLabel, tx + tileW - 6 - pctW, ty + 18, 0xFFEE88);
+                } else {
+                    String idHint = entry.id().getPath();
+                    graphics.drawString(font, truncate(idHint, textBudget), tx + 4, ty + 18, 0x888888);
                 }
-                graphics.drawString(
-                        BiomeTileGridWidget.this.minecraft.font,
-                        truncate(label, tileW - 8),
-                        tx + 3,
-                        ty + (height - 8) / 2,
-                        0xFFFFFF);
 
                 if (hoverTile) {
-                    // Tooltip via screen; store for parent to show biome id
                     BiomeTileGridWidget.this.hoveredTooltipId = entry.id().toString();
                 }
             }
@@ -130,7 +166,8 @@ public class BiomeTileGridWidget extends ObjectSelectionList<BiomeTileGridWidget
         public boolean mouseClicked(double mouseX, double mouseY, int button) {
             int left = BiomeTileGridWidget.this.getRowLeft();
             int width = BiomeTileGridWidget.this.getRowWidth();
-            int tileW = Math.max(40, (width - 4) / COLUMNS);
+            int cols = Math.max(1, maxColumns());
+            int tileW = Math.max(80, (width - 4) / cols);
             int top = BiomeTileGridWidget.this.getRowTop(
                     BiomeTileGridWidget.this.children().indexOf(this));
             if (mouseY < top || mouseY >= top + ROW_HEIGHT) {
@@ -140,7 +177,6 @@ public class BiomeTileGridWidget extends ObjectSelectionList<BiomeTileGridWidget
             if (col >= 0 && col < tiles.size()) {
                 BiomeEntry entry = tiles.get(col);
                 if (button == 1) {
-                    // Right-click focuses without toggle
                     selection.setFocused(entry.id());
                     onTileInteract.accept(entry);
                 } else {
