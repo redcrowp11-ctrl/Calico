@@ -56,14 +56,15 @@ public class CalicoClient {
 
     public static void showCreateConfirm(Component message) {
         createConfirmMessage = message == null ? Component.empty() : message;
-        createConfirmUntilMs = System.currentTimeMillis() + 30_000L;
+        // Quiet confirm: short toast + slim chip (debug scream banner retired).
+        createConfirmUntilMs = System.currentTimeMillis() + 8_000L;
         Calico.LOGGER.info("Calico: {}", createConfirmMessage.getString());
         Minecraft mc = Minecraft.getInstance();
         if (mc != null) {
             SystemToast.addOrUpdate(
                     mc.getToasts(),
                     SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                    Component.literal("Calico Terrain"),
+                    Component.literal("Calico"),
                     createConfirmMessage);
         }
     }
@@ -260,7 +261,7 @@ public class CalicoClient {
                         + ",height=" + holder.value().noiseSettings().height() + ")");
     }
 
-    /** Full-width Done confirm banner on create-world so terrainStyle handoff is visible. */
+    /** Slim Done confirm chip on create-world (toast carries the same text). */
     private static void onScreenRender(ScreenEvent.Render.Post event) {
         if (!(event.getScreen() instanceof CreateWorldScreen screen)) {
             return;
@@ -274,14 +275,12 @@ public class CalicoClient {
         }
         GuiGraphics graphics = event.getGuiGraphics();
         Minecraft mc = Minecraft.getInstance();
-        int barH = 42;
-        graphics.fill(0, 0, screen.width, barH, 0xE0AA2200);
-        graphics.fill(0, barH, screen.width, barH + 2, 0xFFFFFFFF);
-        Component title = Component.literal("CALICO TERRAIN APPLIED — READ THIS");
-        graphics.drawCenteredString(mc.font, title, screen.width / 2, 6, 0xFFFFFF);
-        graphics.drawCenteredString(mc.font, createConfirmMessage, screen.width / 2, 20, 0x88FF88);
-        graphics.drawCenteredString(mc.font,
-                Component.literal("Top of Create World screen (also a toast). Then click Create."),
-                screen.width / 2, 32, 0xFFEE88);
+        int pad = 6;
+        int textW = mc.font.width(createConfirmMessage);
+        int barH = 16;
+        int x0 = Math.max(8, (screen.width - textW) / 2 - pad);
+        int x1 = Math.min(screen.width - 8, x0 + textW + pad * 2);
+        graphics.fill(x0, 4, x1, 4 + barH, 0xC0222222);
+        graphics.drawCenteredString(mc.font, createConfirmMessage, screen.width / 2, 8, 0xAADD88);
     }
 }
