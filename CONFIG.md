@@ -1,4 +1,4 @@
-# Calico config schema (Phase 1 — LOCKED field names)
+# Calico config schema (Phase 1 — LOCKED field names + Phase 2 terrain)
 
 Canonical JSON for biome selection (export/import, last-selection, world-create handoff):
 
@@ -27,7 +27,7 @@ Canonical JSON for biome selection (export/import, last-selection, world-create 
 | Field | Type | Rules |
 |-------|------|--------|
 | `biomeScale` | string | `"normal"` (default) or `"quilt"`. Omitted / unknown → **`normal`**. Do not rename; additive only. |
-| `terrainStyle` | string | Terrain generator style (config field only in Phase 2). Omitted / unknown → **`normal`**. Do not rename; additive only. |
+| `terrainStyle` | string | Terrain generator style. Omitted / unknown → **`normal`**. Do not rename; additive only. **LOCKED** name. |
 
 ### `biomeScale` behavior
 
@@ -38,19 +38,19 @@ Aliases accepted leniently on parse: `vanilla`/`large`/`default` → normal; `ti
 
 ### `terrainStyle` values
 
-| Serialized | Meaning |
-|------------|---------|
-| `normal` | Current overworld terrain (default when omitted) |
-| `sky_islands` | Floating sky landmasses |
-| `islands` | Scattered ocean islands |
-| `big_islands` | Large continent-scale islands |
-| `mountainous` | Rugged peaks and valleys |
-| `cave` | Vast underground cave worlds |
-| `wedding_cake` | Stacked strata with organic continuous voids and occasional column connectors |
+| Serialized | Behavior (Phase 2 first slice) |
+|------------|--------------------------------|
+| `normal` | Default overworld noise settings (current Calico overworld) |
+| `sky_islands` | Vanilla `floating_islands` noise settings + Calico biomes |
+| `wedding_cake` | Custom stacked strata; organic continuous voids; sparse deterministic pillar columns between layers |
+| `islands` | **Fallback → normal** (logged) |
+| `big_islands` | **Fallback → normal** (logged) |
+| `mountainous` | **Fallback → normal** (logged) |
+| `cave` | **Fallback → normal** (logged) |
 
 Aliases accepted leniently on parse: `default`/`overworld` → normal; `sky` → sky_islands; `wedding` → wedding_cake.
 
-Phase 2 ships the config field + Customize CycleButton only; terrain generators are wired later (DevBot).
+Default terrain when omitted = **normal** (current overworld). Terrain styles layer on top of `selectedBiomes`+weights and `biomeScale` (WeightedBiomeSource unchanged).
 
 ## Validation (create gate)
 
@@ -67,9 +67,10 @@ Shared API: `com.calico.config.CalicoConfigValidation#validateForCreate`
 1. UI / handoff calls `CalicoCreateWorldBridge.submit(config, seed)` (or `apply(...)`).
 2. Pending config is held in `CalicoCreateTimeConfig`.
 3. `CalicoWorldPresets.applyCreateTimeConfig` rebuilds Overworld (required) and optionally Nether/End LevelStem biome sources from the selection, scoped by `BiomeDimension`.
-4. Calico world-type Customize opens `CalicoCreateWorldScreen`; selecting Calico with a pending config also auto-bakes into LevelStem on the create-world screen.
-5. `biomeScale` is baked into `WeightedBiomeSource` (codec field `biomeScale`) so Customize / reload preserves Normal vs Quilt.
-6. `terrainStyle` is persisted on `CalicoWorldGenConfig` for later terrain-generator wiring; it is not yet consumed by noise/chunk generators.
+4. Overworld chunk gen uses `CalicoTerrainStyles.resolveOverworldSettings(terrainStyle, …)` so noise settings match the picker (WeightedBiomeSource + biomeScale preserved).
+5. Calico world-type Customize opens `CalicoCreateWorldScreen` (CycleButtons for biome scale + terrain style); selecting Calico with a pending config also auto-bakes into LevelStem on the create-world screen.
+6. `biomeScale` is baked into `WeightedBiomeSource` (codec field `biomeScale`) so Customize / reload preserves Normal vs Quilt.
+7. `terrainStyle` is baked into the overworld `NoiseBasedChunkGenerator` settings holder at create time.
 
 Java types:
 
@@ -77,6 +78,7 @@ Java types:
 - `com.calico.config.SelectedBiomeEntry` — `id` + `weight`
 - `com.calico.config.BiomeScale` — `NORMAL` / `QUILT`
 - `com.calico.config.TerrainStyle` — `NORMAL` / `SKY_ISLANDS` / `ISLANDS` / `BIG_ISLANDS` / `MOUNTAINOUS` / `CAVE` / `WEDDING_CAKE`
+- `com.calico.worldgen.CalicoTerrainStyles` — style → `NoiseGeneratorSettings` resolver
 - Mojang `Codec`s on config types for JSON (de)serialization
 
 Do **not** rename locked JSON keys (`version`, `selectedBiomes`, `id`, `weight`) in Phase 1.

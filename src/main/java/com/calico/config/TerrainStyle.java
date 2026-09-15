@@ -3,10 +3,11 @@ package com.calico.config;
 import com.mojang.serialization.Codec;
 
 /**
- * Terrain generation style for Calico create-time config (Phase 2 — config field only).
+ * Terrain generation style for Calico create-time config (Phase 2).
  * <p>
  * JSON field: {@code "terrainStyle"} (additive; omit → {@link #NORMAL}).
- * Generators are not implemented here; DevBot consumes this field later.
+ * Resolved at create-time by {@code com.calico.worldgen.CalicoTerrainStyles} into
+ * overworld {@code NoiseGeneratorSettings} (LevelStem / chunk gen).
  */
 public enum TerrainStyle {
     NORMAL("normal"),
