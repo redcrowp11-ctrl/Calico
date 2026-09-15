@@ -41,8 +41,8 @@ Aliases accepted leniently on parse: `vanilla`/`large`/`default` → normal; `ti
 | Serialized | Behavior (Phase 2 first slice) |
 |------------|--------------------------------|
 | `normal` | Default overworld noise settings (current Calico overworld) |
-| `sky_islands` | Vanilla `floating_islands` noise settings + Calico biomes |
-| `wedding_cake` | Thin stacked strata + large organic voids; sparse mega stalagmite columns; sealed bedrock floor (no void-kill) |
+| `sky_islands` | End-like discrete floating islands (end_islands + 3D cheese) + Calico biomes; not vanilla floating_islands cheese |
+| `wedding_cake` | Thin stacked strata + organic warped voids; sparse fat mega dripstone columns; cave/strata surfaces (no grass lawns); sealed bedrock floor |
 | `islands` | **Fallback → normal** (logged) |
 | `big_islands` | **Fallback → normal** (logged) |
 | `mountainous` | **Fallback → normal** (logged) |
