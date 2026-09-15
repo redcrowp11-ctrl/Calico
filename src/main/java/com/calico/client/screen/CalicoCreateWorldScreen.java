@@ -142,7 +142,7 @@ public class CalicoCreateWorldScreen extends Screen {
 
         int filtersW = Math.max(80, this.font.width(Component.translatable("calico.screen.create.filters")) + 16);
         int scaleW = 130;
-        int terrainW = 150;
+        int terrainW = 170;
         int searchW = Math.max(100, this.width - MARGIN - x - filtersW - scaleW - terrainW - GAP * 3 - MARGIN);
         this.searchBox = new EditBox(this.font, x, toolbarY, searchW, BTN_H,
                 Component.translatable("calico.screen.create.search"));
