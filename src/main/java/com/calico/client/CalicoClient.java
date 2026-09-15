@@ -13,6 +13,7 @@ import com.calico.worldgen.WeightedBiomeSource;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.core.Holder;
@@ -46,8 +47,16 @@ public class CalicoClient {
 
     public static void showCreateConfirm(Component message) {
         createConfirmMessage = message == null ? Component.empty() : message;
-        createConfirmUntilMs = System.currentTimeMillis() + 12_000L;
+        createConfirmUntilMs = System.currentTimeMillis() + 30_000L;
         Calico.LOGGER.info("Calico: {}", createConfirmMessage.getString());
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) {
+            SystemToast.addOrUpdate(
+                    mc.getToasts(),
+                    SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                    Component.literal("Calico Terrain"),
+                    createConfirmMessage);
+        }
     }
 
     public CalicoClient(IEventBus modEventBus, ModContainer container) {
@@ -176,7 +185,7 @@ public class CalicoClient {
 
     /** Draws Done confirm banner on create-world so terrainStyle handoff is visible. */
     private static void onScreenRender(ScreenEvent.Render.Post event) {
-        if (!(event.getScreen() instanceof CreateWorldScreen)) {
+        if (!(event.getScreen() instanceof CreateWorldScreen screen)) {
             return;
         }
         if (createConfirmMessage.getString().isEmpty()) {
@@ -188,10 +197,14 @@ public class CalicoClient {
         }
         GuiGraphics graphics = event.getGuiGraphics();
         Minecraft mc = Minecraft.getInstance();
-        int y = 8;
-        int w = mc.font.width(createConfirmMessage);
-        int x = Math.max(8, (event.getScreen().width - w) / 2);
-        graphics.fill(x - 4, y - 2, x + w + 4, y + 12, 0xC0000000);
-        graphics.drawString(mc.font, createConfirmMessage, x, y, 0x88FF88);
+        int barH = 42;
+        graphics.fill(0, 0, screen.width, barH, 0xE0AA2200);
+        graphics.fill(0, barH, screen.width, barH + 2, 0xFFFFFFFF);
+        Component title = Component.literal("CALICO TERRAIN APPLIED — READ THIS");
+        graphics.drawCenteredString(mc.font, title, screen.width / 2, 6, 0xFFFFFF);
+        graphics.drawCenteredString(mc.font, createConfirmMessage, screen.width / 2, 20, 0x88FF88);
+        graphics.drawCenteredString(mc.font,
+                Component.literal("Top of Create World screen (also a toast). Then click Create."),
+                screen.width / 2, 32, 0xFFEE88);
     }
 }
