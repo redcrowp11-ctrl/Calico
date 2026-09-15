@@ -48,91 +48,39 @@
                           "argument1": {
                             "type": "minecraft:y_clamped_gradient",
                             "from_value": -1.0,
-                            "from_y": -25,
+                            "from_y": -12,
                             "to_value": 1.0,
-                            "to_y": 3
+                            "to_y": 4
                           },
                           "argument2": {
                             "type": "minecraft:y_clamped_gradient",
                             "from_value": 1.0,
-                            "from_y": 25,
+                            "from_y": 20,
                             "to_value": -1.0,
-                            "to_y": 53
+                            "to_y": 36
                           }
                         },
                         "argument2": {
                           "type": "minecraft:add",
                           "argument1": {
-                            "type": "minecraft:add",
-                            "argument1": {
-                              "type": "minecraft:mul",
-                              "argument1": 1.55,
-                              "argument2": {
-                                "type": "minecraft:noise",
-                                "noise": "minecraft:surface",
-                                "xz_scale": 0.38,
-                                "y_scale": 0.0
-                              }
-                            },
+                            "type": "minecraft:mul",
+                            "argument1": 1.45,
                             "argument2": {
-                              "type": "minecraft:add",
-                              "argument1": {
-                                "type": "minecraft:mul",
-                                "argument1": 0.72,
-                                "argument2": {
-                                  "type": "minecraft:noise",
-                                  "noise": "minecraft:cave_cheese",
-                                  "xz_scale": 0.6,
-                                  "y_scale": 0.0
-                                }
-                              },
-                              "argument2": {
-                                "type": "minecraft:add",
-                                "argument1": {
-                                  "type": "minecraft:mul",
-                                  "argument1": 0.55,
-                                  "argument2": {
-                                    "type": "minecraft:noise",
-                                    "noise": "minecraft:jagged",
-                                    "xz_scale": 0.28,
-                                    "y_scale": 0.0
-                                  }
-                                },
-                                "argument2": {
-                                  "type": "minecraft:add",
-                                  "argument1": {
-                                    "type": "minecraft:mul",
-                                    "argument1": -0.62,
-                                    "argument2": {
-                                      "type": "minecraft:noise",
-                                      "noise": "minecraft:surface",
-                                      "xz_scale": 1.15,
-                                      "y_scale": 0.0
-                                    }
-                                  },
-                                  "argument2": {
-                                    "type": "minecraft:mul",
-                                    "argument1": 0.4,
-                                    "argument2": {
-                                      "type": "minecraft:noise",
-                                      "noise": "minecraft:erosion",
-                                      "xz_scale": 0.42,
-                                      "y_scale": 0.0
-                                    }
-                                  }
-                                }
-                              }
+                              "type": "minecraft:noise",
+                              "noise": "minecraft:surface",
+                              "xz_scale": 0.38,
+                              "y_scale": 0.0
                             }
                           },
                           "argument2": {
                             "type": "minecraft:add",
                             "argument1": {
                               "type": "minecraft:mul",
-                              "argument1": 2.55,
+                              "argument1": 0.65,
                               "argument2": {
                                 "type": "minecraft:noise",
-                                "noise": "minecraft:surface",
-                                "xz_scale": 0.18,
+                                "noise": "minecraft:cave_cheese",
+                                "xz_scale": 0.6,
                                 "y_scale": 0.0
                               }
                             },
@@ -140,21 +88,21 @@
                               "type": "minecraft:add",
                               "argument1": {
                                 "type": "minecraft:mul",
-                                "argument1": 1.65,
+                                "argument1": 0.48,
                                 "argument2": {
                                   "type": "minecraft:noise",
                                   "noise": "minecraft:jagged",
-                                  "xz_scale": 0.35,
+                                  "xz_scale": 0.28,
                                   "y_scale": 0.0
                                 }
                               },
                               "argument2": {
                                 "type": "minecraft:mul",
-                                "argument1": 1.1,
+                                "argument1": -0.55,
                                 "argument2": {
                                   "type": "minecraft:noise",
-                                  "noise": "minecraft:erosion",
-                                  "xz_scale": 0.55,
+                                  "noise": "minecraft:surface",
+                                  "xz_scale": 1.15,
                                   "y_scale": 0.0
                                 }
                               }
@@ -169,7 +117,7 @@
                           "argument1": {
                             "type": "minecraft:y_clamped_gradient",
                             "from_value": -1.0,
-                            "from_y": 45,
+                            "from_y": 47,
                             "to_value": 1.0,
                             "to_y": 62
                           },
@@ -178,14 +126,14 @@
                             "from_value": 1.0,
                             "from_y": 74,
                             "to_value": -1.0,
-                            "to_y": 91
+                            "to_y": 89
                           }
                         },
                         "argument2": {
                           "type": "minecraft:add",
                           "argument1": {
                             "type": "minecraft:mul",
-                            "argument1": 1.55,
+                            "argument1": 1.45,
                             "argument2": {
                               "type": "minecraft:noise",
                               "noise": "minecraft:surface",
@@ -197,7 +145,7 @@
                             "type": "minecraft:add",
                             "argument1": {
                               "type": "minecraft:mul",
-                              "argument1": 0.72,
+                              "argument1": 0.65,
                               "argument2": {
                                 "type": "minecraft:noise",
                                 "noise": "minecraft:cave_cheese",
@@ -209,7 +157,7 @@
                               "type": "minecraft:add",
                               "argument1": {
                                 "type": "minecraft:mul",
-                                "argument1": 0.55,
+                                "argument1": 0.48,
                                 "argument2": {
                                   "type": "minecraft:noise",
                                   "noise": "minecraft:jagged",
@@ -218,26 +166,13 @@
                                 }
                               },
                               "argument2": {
-                                "type": "minecraft:add",
-                                "argument1": {
-                                  "type": "minecraft:mul",
-                                  "argument1": -0.62,
-                                  "argument2": {
-                                    "type": "minecraft:noise",
-                                    "noise": "minecraft:surface",
-                                    "xz_scale": 1.15,
-                                    "y_scale": 0.0
-                                  }
-                                },
+                                "type": "minecraft:mul",
+                                "argument1": -0.55,
                                 "argument2": {
-                                  "type": "minecraft:mul",
-                                  "argument1": 0.4,
-                                  "argument2": {
-                                    "type": "minecraft:noise",
-                                    "noise": "minecraft:erosion",
-                                    "xz_scale": 0.42,
-                                    "y_scale": 0.0
-                                  }
+                                  "type": "minecraft:noise",
+                                  "noise": "minecraft:surface",
+                                  "xz_scale": 1.15,
+                                  "y_scale": 0.0
                                 }
                               }
                             }
@@ -254,7 +189,7 @@
                           "argument1": {
                             "type": "minecraft:y_clamped_gradient",
                             "from_value": -1.0,
-                            "from_y": 97,
+                            "from_y": 99,
                             "to_value": 1.0,
                             "to_y": 113
                           },
@@ -263,14 +198,14 @@
                             "from_value": 1.0,
                             "from_y": 123,
                             "to_value": -1.0,
-                            "to_y": 139
+                            "to_y": 137
                           }
                         },
                         "argument2": {
                           "type": "minecraft:add",
                           "argument1": {
                             "type": "minecraft:mul",
-                            "argument1": 1.55,
+                            "argument1": 1.45,
                             "argument2": {
                               "type": "minecraft:noise",
                               "noise": "minecraft:surface",
@@ -282,7 +217,7 @@
                             "type": "minecraft:add",
                             "argument1": {
                               "type": "minecraft:mul",
-                              "argument1": 0.72,
+                              "argument1": 0.65,
                               "argument2": {
                                 "type": "minecraft:noise",
                                 "noise": "minecraft:cave_cheese",
@@ -294,7 +229,7 @@
                               "type": "minecraft:add",
                               "argument1": {
                                 "type": "minecraft:mul",
-                                "argument1": 0.55,
+                                "argument1": 0.48,
                                 "argument2": {
                                   "type": "minecraft:noise",
                                   "noise": "minecraft:jagged",
@@ -303,26 +238,13 @@
                                 }
                               },
                               "argument2": {
-                                "type": "minecraft:add",
-                                "argument1": {
-                                  "type": "minecraft:mul",
-                                  "argument1": -0.62,
-                                  "argument2": {
-                                    "type": "minecraft:noise",
-                                    "noise": "minecraft:surface",
-                                    "xz_scale": 1.15,
-                                    "y_scale": 0.0
-                                  }
-                                },
+                                "type": "minecraft:mul",
+                                "argument1": -0.55,
                                 "argument2": {
-                                  "type": "minecraft:mul",
-                                  "argument1": 0.4,
-                                  "argument2": {
-                                    "type": "minecraft:noise",
-                                    "noise": "minecraft:erosion",
-                                    "xz_scale": 0.42,
-                                    "y_scale": 0.0
-                                  }
+                                  "type": "minecraft:noise",
+                                  "noise": "minecraft:surface",
+                                  "xz_scale": 1.15,
+                                  "y_scale": 0.0
                                 }
                               }
                             }
@@ -336,23 +258,23 @@
                           "argument1": {
                             "type": "minecraft:y_clamped_gradient",
                             "from_value": -1.0,
-                            "from_y": 141,
+                            "from_y": 144,
                             "to_value": 1.0,
-                            "to_y": 156
+                            "to_y": 157
                           },
                           "argument2": {
                             "type": "minecraft:y_clamped_gradient",
                             "from_value": 1.0,
-                            "from_y": 168,
+                            "from_y": 167,
                             "to_value": -1.0,
-                            "to_y": 183
+                            "to_y": 180
                           }
                         },
                         "argument2": {
                           "type": "minecraft:add",
                           "argument1": {
                             "type": "minecraft:mul",
-                            "argument1": 1.55,
+                            "argument1": 1.45,
                             "argument2": {
                               "type": "minecraft:noise",
                               "noise": "minecraft:surface",
@@ -364,7 +286,7 @@
                             "type": "minecraft:add",
                             "argument1": {
                               "type": "minecraft:mul",
-                              "argument1": 0.72,
+                              "argument1": 0.65,
                               "argument2": {
                                 "type": "minecraft:noise",
                                 "noise": "minecraft:cave_cheese",
@@ -376,7 +298,7 @@
                               "type": "minecraft:add",
                               "argument1": {
                                 "type": "minecraft:mul",
-                                "argument1": 0.55,
+                                "argument1": 0.48,
                                 "argument2": {
                                   "type": "minecraft:noise",
                                   "noise": "minecraft:jagged",
@@ -385,26 +307,13 @@
                                 }
                               },
                               "argument2": {
-                                "type": "minecraft:add",
-                                "argument1": {
-                                  "type": "minecraft:mul",
-                                  "argument1": -0.62,
-                                  "argument2": {
-                                    "type": "minecraft:noise",
-                                    "noise": "minecraft:surface",
-                                    "xz_scale": 1.15,
-                                    "y_scale": 0.0
-                                  }
-                                },
+                                "type": "minecraft:mul",
+                                "argument1": -0.55,
                                 "argument2": {
-                                  "type": "minecraft:mul",
-                                  "argument1": 0.4,
-                                  "argument2": {
-                                    "type": "minecraft:noise",
-                                    "noise": "minecraft:erosion",
-                                    "xz_scale": 0.42,
-                                    "y_scale": 0.0
-                                  }
+                                  "type": "minecraft:noise",
+                                  "noise": "minecraft:surface",
+                                  "xz_scale": 1.15,
+                                  "y_scale": 0.0
                                 }
                               }
                             }
@@ -422,7 +331,7 @@
                         "argument1": {
                           "type": "minecraft:y_clamped_gradient",
                           "from_value": -1.0,
-                          "from_y": 190,
+                          "from_y": 191,
                           "to_value": 1.0,
                           "to_y": 204
                         },
@@ -431,14 +340,14 @@
                           "from_value": 1.0,
                           "from_y": 212,
                           "to_value": -1.0,
-                          "to_y": 226
+                          "to_y": 225
                         }
                       },
                       "argument2": {
                         "type": "minecraft:add",
                         "argument1": {
                           "type": "minecraft:mul",
-                          "argument1": 1.55,
+                          "argument1": 1.45,
                           "argument2": {
                             "type": "minecraft:noise",
                             "noise": "minecraft:surface",
@@ -450,7 +359,7 @@
                           "type": "minecraft:add",
                           "argument1": {
                             "type": "minecraft:mul",
-                            "argument1": 0.72,
+                            "argument1": 0.65,
                             "argument2": {
                               "type": "minecraft:noise",
                               "noise": "minecraft:cave_cheese",
@@ -462,7 +371,7 @@
                             "type": "minecraft:add",
                             "argument1": {
                               "type": "minecraft:mul",
-                              "argument1": 0.55,
+                              "argument1": 0.48,
                               "argument2": {
                                 "type": "minecraft:noise",
                                 "noise": "minecraft:jagged",
@@ -471,26 +380,13 @@
                               }
                             },
                             "argument2": {
-                              "type": "minecraft:add",
-                              "argument1": {
-                                "type": "minecraft:mul",
-                                "argument1": -0.62,
-                                "argument2": {
-                                  "type": "minecraft:noise",
-                                  "noise": "minecraft:surface",
-                                  "xz_scale": 1.15,
-                                  "y_scale": 0.0
-                                }
-                              },
+                              "type": "minecraft:mul",
+                              "argument1": -0.55,
                               "argument2": {
-                                "type": "minecraft:mul",
-                                "argument1": 0.4,
-                                "argument2": {
-                                  "type": "minecraft:noise",
-                                  "noise": "minecraft:erosion",
-                                  "xz_scale": 0.42,
-                                  "y_scale": 0.0
-                                }
+                                "type": "minecraft:noise",
+                                "noise": "minecraft:surface",
+                                "xz_scale": 1.15,
+                                "y_scale": 0.0
                               }
                             }
                           }
@@ -504,7 +400,7 @@
                         "argument1": {
                           "type": "minecraft:y_clamped_gradient",
                           "from_value": -1.0,
-                          "from_y": 233,
+                          "from_y": 234,
                           "to_value": 1.0,
                           "to_y": 246
                         },
@@ -513,14 +409,14 @@
                           "from_value": 1.0,
                           "from_y": 254,
                           "to_value": -1.0,
-                          "to_y": 267
+                          "to_y": 266
                         }
                       },
                       "argument2": {
                         "type": "minecraft:add",
                         "argument1": {
                           "type": "minecraft:mul",
-                          "argument1": 1.55,
+                          "argument1": 1.45,
                           "argument2": {
                             "type": "minecraft:noise",
                             "noise": "minecraft:surface",
@@ -532,7 +428,7 @@
                           "type": "minecraft:add",
                           "argument1": {
                             "type": "minecraft:mul",
-                            "argument1": 0.72,
+                            "argument1": 0.65,
                             "argument2": {
                               "type": "minecraft:noise",
                               "noise": "minecraft:cave_cheese",
@@ -544,7 +440,7 @@
                             "type": "minecraft:add",
                             "argument1": {
                               "type": "minecraft:mul",
-                              "argument1": 0.55,
+                              "argument1": 0.48,
                               "argument2": {
                                 "type": "minecraft:noise",
                                 "noise": "minecraft:jagged",
@@ -553,26 +449,13 @@
                               }
                             },
                             "argument2": {
-                              "type": "minecraft:add",
-                              "argument1": {
-                                "type": "minecraft:mul",
-                                "argument1": -0.62,
-                                "argument2": {
-                                  "type": "minecraft:noise",
-                                  "noise": "minecraft:surface",
-                                  "xz_scale": 1.15,
-                                  "y_scale": 0.0
-                                }
-                              },
+                              "type": "minecraft:mul",
+                              "argument1": -0.55,
                               "argument2": {
-                                "type": "minecraft:mul",
-                                "argument1": 0.4,
-                                "argument2": {
-                                  "type": "minecraft:noise",
-                                  "noise": "minecraft:erosion",
-                                  "xz_scale": 0.42,
-                                  "y_scale": 0.0
-                                }
+                                "type": "minecraft:noise",
+                                "noise": "minecraft:surface",
+                                "xz_scale": 1.15,
+                                "y_scale": 0.0
                               }
                             }
                           }
@@ -583,7 +466,7 @@
                 },
                 "argument2": {
                   "type": "minecraft:add",
-                  "argument1": -0.55,
+                  "argument1": -0.1,
                   "argument2": {
                     "type": "minecraft:cache_once",
                     "argument": {
@@ -594,38 +477,25 @@
                           "type": "minecraft:add",
                           "argument1": {
                             "type": "minecraft:mul",
-                            "argument1": 3.4,
+                            "argument1": 2.9,
                             "argument2": {
                               "type": "minecraft:noise",
                               "noise": "minecraft:pillar",
-                              "xz_scale": 1.85,
-                              "y_scale": 0.28
+                              "xz_scale": 3.5,
+                              "y_scale": 0.07
                             }
                           },
                           "argument2": {
                             "type": "minecraft:add",
-                            "argument1": {
-                              "type": "minecraft:add",
-                              "argument1": -1.925,
-                              "argument2": {
-                                "type": "minecraft:mul",
-                                "argument1": -1.925,
-                                "argument2": {
-                                  "type": "minecraft:noise",
-                                  "noise": "minecraft:pillar_rareness",
-                                  "xz_scale": 1.0,
-                                  "y_scale": 1.0
-                                }
-                              }
-                            },
+                            "argument1": -1.725,
                             "argument2": {
                               "type": "minecraft:mul",
-                              "argument1": 0.55,
+                              "argument1": -1.725,
                               "argument2": {
                                 "type": "minecraft:noise",
-                                "noise": "minecraft:erosion",
-                                "xz_scale": 0.55,
-                                "y_scale": 0.4
+                                "noise": "minecraft:pillar_rareness",
+                                "xz_scale": 1.0,
+                                "y_scale": 1.0
                               }
                             }
                           }
@@ -634,10 +504,10 @@
                           "type": "minecraft:cube",
                           "argument": {
                             "type": "minecraft:add",
-                            "argument1": 3.575,
+                            "argument1": 2.125,
                             "argument2": {
                               "type": "minecraft:mul",
-                              "argument1": 1.2249999999999999,
+                              "argument1": 0.875,
                               "argument2": {
                                 "type": "minecraft:noise",
                                 "noise": "minecraft:pillar_thickness",
@@ -652,22 +522,22 @@
                         "type": "minecraft:add",
                         "argument1": {
                           "type": "minecraft:mul",
-                          "argument1": 0.58,
+                          "argument1": 0.35,
                           "argument2": {
                             "type": "minecraft:noise",
                             "noise": "minecraft:surface",
-                            "xz_scale": 0.65,
-                            "y_scale": 0.12
+                            "xz_scale": 0.85,
+                            "y_scale": 0.0
                           }
                         },
                         "argument2": {
                           "type": "minecraft:mul",
-                          "argument1": 0.4,
+                          "argument1": 0.22,
                           "argument2": {
                             "type": "minecraft:noise",
                             "noise": "minecraft:jagged",
-                            "xz_scale": 0.45,
-                            "y_scale": 0.2
+                            "xz_scale": 0.55,
+                            "y_scale": 0.0
                           }
                         }
                       }
@@ -701,61 +571,22 @@
               "type": "minecraft:max",
               "argument1": {
                 "type": "minecraft:add",
-                "argument1": {
+                "argument1": 0.0,
+                "argument2": {
                   "type": "minecraft:min",
                   "argument1": {
                     "type": "minecraft:y_clamped_gradient",
                     "from_value": -1.0,
-                    "from_y": -25,
+                    "from_y": -12,
                     "to_value": 1.0,
-                    "to_y": 3
+                    "to_y": 4
                   },
                   "argument2": {
                     "type": "minecraft:y_clamped_gradient",
                     "from_value": 1.0,
-                    "from_y": 25,
+                    "from_y": 20,
                     "to_value": -1.0,
-                    "to_y": 53
-                  }
-                },
-                "argument2": {
-                  "type": "minecraft:add",
-                  "argument1": 0.0,
-                  "argument2": {
-                    "type": "minecraft:add",
-                    "argument1": {
-                      "type": "minecraft:mul",
-                      "argument1": 2.55,
-                      "argument2": {
-                        "type": "minecraft:noise",
-                        "noise": "minecraft:surface",
-                        "xz_scale": 0.18,
-                        "y_scale": 0.0
-                      }
-                    },
-                    "argument2": {
-                      "type": "minecraft:add",
-                      "argument1": {
-                        "type": "minecraft:mul",
-                        "argument1": 1.65,
-                        "argument2": {
-                          "type": "minecraft:noise",
-                          "noise": "minecraft:jagged",
-                          "xz_scale": 0.35,
-                          "y_scale": 0.0
-                        }
-                      },
-                      "argument2": {
-                        "type": "minecraft:mul",
-                        "argument1": 1.1,
-                        "argument2": {
-                          "type": "minecraft:noise",
-                          "noise": "minecraft:erosion",
-                          "xz_scale": 0.55,
-                          "y_scale": 0.0
-                        }
-                      }
-                    }
+                    "to_y": 36
                   }
                 }
               },
@@ -767,7 +598,7 @@
                   "argument1": {
                     "type": "minecraft:y_clamped_gradient",
                     "from_value": -1.0,
-                    "from_y": 45,
+                    "from_y": 47,
                     "to_value": 1.0,
                     "to_y": 62
                   },
@@ -776,7 +607,7 @@
                     "from_value": 1.0,
                     "from_y": 74,
                     "to_value": -1.0,
-                    "to_y": 91
+                    "to_y": 89
                   }
                 }
               }
@@ -791,7 +622,7 @@
                   "argument1": {
                     "type": "minecraft:y_clamped_gradient",
                     "from_value": -1.0,
-                    "from_y": 97,
+                    "from_y": 99,
                     "to_value": 1.0,
                     "to_y": 113
                   },
@@ -800,7 +631,7 @@
                     "from_value": 1.0,
                     "from_y": 123,
                     "to_value": -1.0,
-                    "to_y": 139
+                    "to_y": 137
                   }
                 }
               },
@@ -812,16 +643,16 @@
                   "argument1": {
                     "type": "minecraft:y_clamped_gradient",
                     "from_value": -1.0,
-                    "from_y": 141,
+                    "from_y": 144,
                     "to_value": 1.0,
-                    "to_y": 156
+                    "to_y": 157
                   },
                   "argument2": {
                     "type": "minecraft:y_clamped_gradient",
                     "from_value": 1.0,
-                    "from_y": 168,
+                    "from_y": 167,
                     "to_value": -1.0,
-                    "to_y": 183
+                    "to_y": 180
                   }
                 }
               }
@@ -837,7 +668,7 @@
                 "argument1": {
                   "type": "minecraft:y_clamped_gradient",
                   "from_value": -1.0,
-                  "from_y": 190,
+                  "from_y": 191,
                   "to_value": 1.0,
                   "to_y": 204
                 },
@@ -846,7 +677,7 @@
                   "from_value": 1.0,
                   "from_y": 212,
                   "to_value": -1.0,
-                  "to_y": 226
+                  "to_y": 225
                 }
               }
             },
@@ -858,7 +689,7 @@
                 "argument1": {
                   "type": "minecraft:y_clamped_gradient",
                   "from_value": -1.0,
-                  "from_y": 233,
+                  "from_y": 234,
                   "to_value": 1.0,
                   "to_y": 246
                 },
@@ -867,7 +698,7 @@
                   "from_value": 1.0,
                   "from_y": 254,
                   "to_value": -1.0,
-                  "to_y": 267
+                  "to_y": 266
                 }
               }
             }

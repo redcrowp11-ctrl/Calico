@@ -38,17 +38,18 @@ Aliases accepted leniently on parse: `vanilla`/`large`/`default` → normal; `ti
 
 ### `terrainStyle` values
 
-| Serialized | Behavior (Phase 2 first slice) |
-|------------|--------------------------------|
+| Serialized | Behavior |
+|------------|----------|
 | `normal` | Default overworld noise settings (current Calico overworld) |
-| `sky_islands` | Archipelago of large floating islands (bulbous undersides, no End solitude / cones / pencil spikes) + Calico biomes; registered as `calico:sky_islands` |
-| `wedding_cake` | Thin stacked strata + organic warped voids; sparse fat mega dripstone trunks; cave/strata surfaces (no grass lawns); rough bottom plate; sealed bedrock floor; registered as `calico:wedding_cake` |
-| `islands` | **Fallback → normal** (logged) |
-| `big_islands` | **Fallback → normal** (logged) |
-| `mountainous` | **Fallback → normal** (logged) |
-| `cave` | **Fallback → normal** (logged) |
+| `sky_islands` | End-like floating islands over void (`end_islands` + 3D cheese); registered as `calico:sky_islands` |
+| `islands` | Regular sea-level islands in ocean; registered as `calico:islands` |
+| `big_islands` | Larger sea-level islands with wider ocean gaps; registered as `calico:big_islands` |
+| `mountainous` | Tall mountains via vanilla amplified (`minecraft:amplified`) |
+| `cave` | Cave-focused world via vanilla caves (`minecraft:caves`) |
+| `wedding_cake` | Layered strata + organic voids + thick mega columns; sealed bedrock floor; registered as `calico:wedding_cake` |
+| `ant_hill` | Smooth tall mountains with dense interconnect tunnels; registered as `calico:ant_hill` |
 
-Aliases accepted leniently on parse: `standard`/`default`/`overworld` → normal; `sky` → sky_islands; `wedding` → wedding_cake. Unknown values log ERROR and fall back to normal.
+Aliases accepted leniently on parse: `standard`/`default`/`overworld` → normal; `sky` → sky_islands; `wedding` → wedding_cake; `anthill`/`ant-hill` → ant_hill; `mountains`/`amplified` → mountainous; `caves` → cave. Unknown values log ERROR and fall back to normal.
 
 Default terrain when omitted = **normal** (current overworld). Terrain styles layer on top of `selectedBiomes`+weights and `biomeScale` (WeightedBiomeSource unchanged).
 
@@ -70,15 +71,15 @@ Shared API: `com.calico.config.CalicoConfigValidation#validateForCreate`
 4. Overworld chunk gen uses `CalicoTerrainStyles.resolveOverworldSettings(terrainStyle, …)` so noise settings match the picker (WeightedBiomeSource + biomeScale preserved).
 5. Calico world-type Customize opens `CalicoCreateWorldScreen` (CycleButtons for biome scale + terrain style); selecting Calico with a pending config also auto-bakes into LevelStem on the create-world screen.
 6. `biomeScale` is baked into `WeightedBiomeSource` (codec field `biomeScale`) so Customize / reload preserves Normal vs Quilt.
-7. `terrainStyle` is baked into the overworld `NoiseBasedChunkGenerator` settings holder at create time via registry keys `calico:sky_islands` / `calico:wedding_cake` (not anonymous `Holder.direct`, so save/reload cannot silently become Normal).
-8. Create-world auto-bake re-applies whenever the overworld stem is still vanilla OVERWORLD while a custom terrainStyle is pending (world-type reset used to skip re-bake). Re-bake also runs on screen init and every client tick while Create World is open on Calico, so Done→Create cannot keep OVERWORLD noise when pending is sky_islands / wedding_cake. Logs include the resolved `noiseSettings` key after apply. Orange "CALICO TERRAIN APPLIED" banner + toast confirm Done handoff.
+7. `terrainStyle` is baked into the overworld `NoiseBasedChunkGenerator` settings holder at create time via registry keys (`calico:sky_islands`, `calico:wedding_cake`, `calico:islands`, `calico:big_islands`, `calico:ant_hill`, or vanilla `minecraft:amplified` / `minecraft:caves`).
+8. Create-world auto-bake re-applies whenever the overworld stem is still vanilla OVERWORLD while a custom terrainStyle is pending (world-type reset used to skip re-bake). Re-bake also runs on screen init and every client tick while Create World is open on Calico. Quiet INFO logs confirm bake; no banner/toast spam.
 
 Java types:
 
 - `com.calico.config.CalicoWorldGenConfig` — `version` + `selectedBiomes` + `biomeScale` + `terrainStyle`
 - `com.calico.config.SelectedBiomeEntry` — `id` + `weight`
 - `com.calico.config.BiomeScale` — `NORMAL` / `QUILT`
-- `com.calico.config.TerrainStyle` — `NORMAL` / `SKY_ISLANDS` / `ISLANDS` / `BIG_ISLANDS` / `MOUNTAINOUS` / `CAVE` / `WEDDING_CAKE`
+- `com.calico.config.TerrainStyle` — `NORMAL` / `SKY_ISLANDS` / `ISLANDS` / `BIG_ISLANDS` / `MOUNTAINOUS` / `CAVE` / `WEDDING_CAKE` / `ANT_HILL`
 - `com.calico.worldgen.CalicoTerrainStyles` — style → `NoiseGeneratorSettings` resolver
 - Mojang `Codec`s on config types for JSON (de)serialization
 

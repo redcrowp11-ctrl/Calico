@@ -13,8 +13,6 @@ import com.calico.worldgen.CalicoWorldPresets;
 import com.calico.worldgen.WeightedBiomeSource;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
@@ -37,35 +35,21 @@ import net.neoforged.neoforge.common.NeoForge;
  * Client-side entry: registers the Calico create-world biome picker and bakes
  * pending create-time config into LevelStem when the Calico world type is selected.
  * <p>
- * Done→Create bake contract: Customize Done writes pending + apply(); world-type
- * select can reset LevelStem to datapack OVERWORLD; we re-bake on init, on uiState
- * change, and every client tick while Create World is open so noise settings cannot
- * stay OVERWORLD when pending terrainStyle is sky_islands / wedding_cake.
+ * Done→Create bake contract (from 5772325): Customize Done writes pending + apply();
+ * world-type select can reset LevelStem to datapack OVERWORLD; we re-bake on init,
+ * on uiState change, and every client tick while Create World is open so noise
+ * settings cannot stay OVERWORLD when pending terrainStyle is custom.
+ * Banner/toast UX stripped — quiet INFO logs only.
  */
 @Mod(value = Calico.MOD_ID, dist = Dist.CLIENT)
 public class CalicoClient {
-    /** Guard against recursive uiState listener updates when applying LevelStem. */
     private static boolean applyingCreateTimeConfig;
-
-    /** Avoid stacking duplicate uiState listeners on the same CreateWorldScreen instance. */
     private static CreateWorldScreen hookedScreen;
 
-    /** Shown on CreateWorldScreen after Customize Done — proves terrainStyle handoff. */
-    private static Component createConfirmMessage = Component.empty();
-    private static long createConfirmUntilMs;
-
+    /** Log-only Done confirm (no toast / no orange banner). */
     public static void showCreateConfirm(Component message) {
-        createConfirmMessage = message == null ? Component.empty() : message;
-        // Quiet confirm: short toast + slim chip (debug scream banner retired).
-        createConfirmUntilMs = System.currentTimeMillis() + 8_000L;
-        Calico.LOGGER.info("Calico: {}", createConfirmMessage.getString());
-        Minecraft mc = Minecraft.getInstance();
-        if (mc != null) {
-            SystemToast.addOrUpdate(
-                    mc.getToasts(),
-                    SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                    Component.literal("Calico"),
-                    createConfirmMessage);
+        if (message != null && !message.getString().isEmpty()) {
+            Calico.LOGGER.info("Calico: {}", message.getString());
         }
     }
 
@@ -73,7 +57,6 @@ public class CalicoClient {
         modEventBus.addListener(this::onClientSetup);
         modEventBus.addListener(this::onRegisterPresetEditors);
         NeoForge.EVENT_BUS.addListener(CalicoClient::onScreenInit);
-        NeoForge.EVENT_BUS.addListener(CalicoClient::onScreenRender);
         NeoForge.EVENT_BUS.addListener(CalicoClient::onClientTick);
     }
 
@@ -110,10 +93,6 @@ public class CalicoClient {
         });
     }
 
-    /**
-     * Continuous heal: world-type / datapack reset can wipe noise settings after Done.
-     * Keep overworld stem matched to pending terrainStyle until the player leaves Create World.
-     */
     private static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null || !(mc.screen instanceof CreateWorldScreen createWorldScreen)) {
@@ -159,12 +138,13 @@ public class CalicoClient {
                     config.terrainStyle() == null ? "normal" : config.terrainStyle().serializedName(),
                     config.selectedBiomes().size(),
                     noiseKey);
-            if (isCustomTerrain(config.terrainStyle())
+            TerrainStyle style = config.terrainStyle() == null ? TerrainStyle.NORMAL : config.terrainStyle();
+            if (style.isCustomTerrain()
                     && baked instanceof NoiseBasedChunkGenerator ng
                     && ng.stable(NoiseGeneratorSettings.OVERWORLD)) {
                 Calico.LOGGER.error(
                         "Calico: BAKE FAILED — pending terrainStyle={} but overworld stem still OVERWORLD after apply",
-                        config.terrainStyle().serializedName());
+                        style.serializedName());
             }
         } catch (IllegalArgumentException ex) {
             Calico.LOGGER.warn("Calico: failed to apply create-time config to LevelStem: {}", ex.getMessage());
@@ -173,9 +153,6 @@ public class CalicoClient {
         }
     }
 
-    /**
-     * Does NOT overwrite an already-valid in-memory pending (Done always wins over disk).
-     */
     private static void ensurePendingFromPersistence(CreateWorldScreen screen) {
         if (CalicoCreateWorldBridge.hasValidPending()) {
             return;
@@ -197,22 +174,14 @@ public class CalicoClient {
 
     /**
      * Returns true when overworld stem does not yet reflect pending biomes / terrainStyle.
-     * <p>
-     * <b>PROOF — needsBake cannot skip sky/cake while stem is still OVERWORLD:</b>
-     * when pending style is {@link TerrainStyle#SKY_ISLANDS} or {@link TerrainStyle#WEDDING_CAKE}
-     * and {@code noiseGen.stable(OVERWORLD)} is true, the customTerrain branch returns
-     * {@code true}. Style-specific branches also return {@code true} unless the stem is
-     * {@code stable(calico:sky_islands)} / {@code stable(calico:wedding_cake)} (or a clear
-     * Holder.direct heuristic). A datapack/world-type reset that leaves OVERWORLD always
-     * forces re-bake.
+     * Custom style + {@code stable(OVERWORLD)} always forces re-bake (5772325 heal).
      */
     static boolean needsBake(ChunkGenerator overworld, CalicoWorldGenConfig config) {
         if (!(overworld instanceof NoiseBasedChunkGenerator noiseGen)) {
             return true;
         }
         TerrainStyle style = config.terrainStyle() == null ? TerrainStyle.NORMAL : config.terrainStyle();
-        // PROOF: custom style + stable(OVERWORLD) ⇒ true (cannot skip).
-        if (isCustomTerrain(style) && noiseGen.stable(NoiseGeneratorSettings.OVERWORLD)) {
+        if (style.isCustomTerrain() && noiseGen.stable(NoiseGeneratorSettings.OVERWORLD)) {
             return true;
         }
         if (style == TerrainStyle.SKY_ISLANDS
@@ -225,14 +194,25 @@ public class CalicoClient {
                 && !looksLikeWeddingCake(noiseGen)) {
             return true;
         }
+        if (style == TerrainStyle.ISLANDS && !noiseGen.stable(CalicoTerrainStyles.ISLANDS)) {
+            return true;
+        }
+        if (style == TerrainStyle.BIG_ISLANDS && !noiseGen.stable(CalicoTerrainStyles.BIG_ISLANDS)) {
+            return true;
+        }
+        if (style == TerrainStyle.ANT_HILL && !noiseGen.stable(CalicoTerrainStyles.ANT_HILL)) {
+            return true;
+        }
+        if (style == TerrainStyle.MOUNTAINOUS && !noiseGen.stable(NoiseGeneratorSettings.AMPLIFIED)) {
+            return true;
+        }
+        if (style == TerrainStyle.CAVE && !noiseGen.stable(NoiseGeneratorSettings.CAVES)) {
+            return true;
+        }
         if (!(noiseGen.getBiomeSource() instanceof WeightedBiomeSource)) {
             return true;
         }
         return false;
-    }
-
-    private static boolean isCustomTerrain(TerrainStyle style) {
-        return style == TerrainStyle.SKY_ISLANDS || style == TerrainStyle.WEDDING_CAKE;
     }
 
     private static boolean looksLikeSkyIslands(NoiseBasedChunkGenerator noiseGen) {
@@ -259,28 +239,5 @@ public class CalicoClient {
                         + ",aquifers=" + holder.value().isAquifersEnabled()
                         + ",minY=" + holder.value().noiseSettings().minY()
                         + ",height=" + holder.value().noiseSettings().height() + ")");
-    }
-
-    /** Slim Done confirm chip on create-world (toast carries the same text). */
-    private static void onScreenRender(ScreenEvent.Render.Post event) {
-        if (!(event.getScreen() instanceof CreateWorldScreen screen)) {
-            return;
-        }
-        if (createConfirmMessage.getString().isEmpty()) {
-            return;
-        }
-        if (System.currentTimeMillis() > createConfirmUntilMs) {
-            createConfirmMessage = Component.empty();
-            return;
-        }
-        GuiGraphics graphics = event.getGuiGraphics();
-        Minecraft mc = Minecraft.getInstance();
-        int pad = 6;
-        int textW = mc.font.width(createConfirmMessage);
-        int barH = 16;
-        int x0 = Math.max(8, (screen.width - textW) / 2 - pad);
-        int x1 = Math.min(screen.width - 8, x0 + textW + pad * 2);
-        graphics.fill(x0, 4, x1, 4 + barH, 0xC0222222);
-        graphics.drawCenteredString(mc.font, createConfirmMessage, screen.width / 2, 8, 0xAADD88);
     }
 }

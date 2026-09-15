@@ -9,6 +9,9 @@ import com.mojang.serialization.Codec;
  * JSON field: {@code "terrainStyle"} (additive; omit → {@link #NORMAL}).
  * Resolved at create-time by {@code com.calico.worldgen.CalicoTerrainStyles} into
  * overworld {@code NoiseGeneratorSettings} (LevelStem / chunk gen).
+ * <p>
+ * Locked ids: normal, sky_islands, islands, big_islands, mountainous, cave,
+ * wedding_cake, ant_hill.
  */
 public enum TerrainStyle {
     NORMAL("normal"),
@@ -17,7 +20,8 @@ public enum TerrainStyle {
     BIG_ISLANDS("big_islands"),
     MOUNTAINOUS("mountainous"),
     CAVE("cave"),
-    WEDDING_CAKE("wedding_cake");
+    WEDDING_CAKE("wedding_cake"),
+    ANT_HILL("ant_hill");
 
     public static final Codec<TerrainStyle> CODEC =
             Codec.STRING.xmap(TerrainStyle::parseLenient, TerrainStyle::serializedName);
@@ -46,7 +50,6 @@ public enum TerrainStyle {
                 return style;
             }
         }
-        // Aliases (legacy / UI typos → locked enum serialized names)
         if ("standard".equals(key) || "default".equals(key) || "overworld".equals(key)) {
             return NORMAL;
         }
@@ -56,9 +59,23 @@ public enum TerrainStyle {
         if ("wedding".equals(key)) {
             return WEDDING_CAKE;
         }
+        if ("anthill".equals(key) || "ant-hill".equals(key) || "antnest".equals(key)) {
+            return ANT_HILL;
+        }
+        if ("mountains".equals(key) || "amplified".equals(key)) {
+            return MOUNTAINOUS;
+        }
+        if ("caves".equals(key)) {
+            return CAVE;
+        }
         Calico.LOGGER.error(
-                "Calico: unknown terrainStyle=\"{}\" — falling back to normal (locked: normal, sky_islands, islands, big_islands, mountainous, cave, wedding_cake)",
+                "Calico: unknown terrainStyle=\"{}\" — falling back to normal (locked: normal, sky_islands, islands, big_islands, mountainous, cave, wedding_cake, ant_hill)",
                 raw);
         return NORMAL;
+    }
+
+    /** True when style is not vanilla overworld (needs non-OVERWORLD noise settings). */
+    public boolean isCustomTerrain() {
+        return this != NORMAL;
     }
 }

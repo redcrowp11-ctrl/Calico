@@ -224,7 +224,7 @@ public class CalicoCreateWorldScreen extends Screen {
         }
 
         // Locked emit ids via TerrainStyle.serializedName(): normal|sky_islands|islands|
-        // big_islands|mountainous|cave|wedding_cake — never "standard" (alias→normal on parse only).
+        // big_islands|mountainous|cave|wedding_cake|ant_hill — never "standard" (alias→normal on parse only).
         this.terrainStyleButton = CycleButton.<TerrainStyle>builder(v -> Component.translatable(
                         switch (v) {
                             case NORMAL -> "calico.screen.create.terrain.normal";
@@ -234,6 +234,7 @@ public class CalicoCreateWorldScreen extends Screen {
                             case MOUNTAINOUS -> "calico.screen.create.terrain.mountainous";
                             case CAVE -> "calico.screen.create.terrain.cave";
                             case WEDDING_CAKE -> "calico.screen.create.terrain.wedding_cake";
+                            case ANT_HILL -> "calico.screen.create.terrain.ant_hill";
                         }))
                 .withValues(TerrainStyle.values())
                 .withInitialValue(this.selection.terrainStyle())

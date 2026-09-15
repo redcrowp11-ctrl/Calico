@@ -145,13 +145,11 @@ public final class CalicoWorldPresets {
                 overworldSource.entries().size(),
                 config.terrainStyle() == null ? "normal" : config.terrainStyle().serializedName(),
                 noiseKey);
-        if (config.terrainStyle() == com.calico.config.TerrainStyle.SKY_ISLANDS
-                && overworldNoise.is(NoiseGeneratorSettings.OVERWORLD)) {
-            Calico.LOGGER.error("Calico: sky_islands resolve produced OVERWORLD — create path will look like solid overworld");
-        }
-        if (config.terrainStyle() == com.calico.config.TerrainStyle.WEDDING_CAKE
-                && overworldNoise.is(NoiseGeneratorSettings.OVERWORLD)) {
-            Calico.LOGGER.error("Calico: wedding_cake resolve produced OVERWORLD — create path will look like solid overworld");
+        var style = config.terrainStyle();
+        if (style != null && style.isCustomTerrain() && overworldNoise.is(NoiseGeneratorSettings.OVERWORLD)) {
+            Calico.LOGGER.error(
+                    "Calico: terrainStyle={} resolve produced OVERWORLD — create path will ignore custom terrain",
+                    style.serializedName());
         }
         return new WorldDimensions(map);
     }
