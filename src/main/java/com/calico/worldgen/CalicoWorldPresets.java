@@ -27,6 +27,7 @@ import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import net.minecraft.world.level.levelgen.WorldDimensions;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import net.neoforged.neoforge.common.data.DatapackBuiltinEntriesProvider;
@@ -38,7 +39,8 @@ import net.minecraft.core.RegistrySetBuilder;
  * <p>
  * Datagen + datapack JSON register {@code calico:calico} so it appears in the create-world
  * world-type list. Runtime helpers bake {@link CalicoWorldGenConfig} into {@link LevelStem}
- * biome sources (create-time config → WeightedBiomeSource).
+ * biome sources + terrain noise settings (create-time config → WeightedBiomeSource +
+ * {@link CalicoTerrainStyles}).
  */
 public final class CalicoWorldPresets {
     public static final ResourceKey<WorldPreset> CALICO = ResourceKey.create(
@@ -48,15 +50,17 @@ public final class CalicoWorldPresets {
     private CalicoWorldPresets() {
     }
 
-    /** Builds an overworld stem using Calico weighted biomes from config + seed. */
+    /** Builds an overworld stem using Calico weighted biomes + terrainStyle from config + seed. */
     public static LevelStem createOverworldStem(
             CalicoWorldGenConfig config,
             long worldSeed,
             HolderGetter<Biome> biomes,
             HolderGetter<DimensionType> dimensionTypes,
-            HolderGetter<NoiseGeneratorSettings> noiseSettings) {
+            HolderGetter<NoiseGeneratorSettings> noiseSettings,
+            HolderGetter<NormalNoise.NoiseParameters> noises) {
         BiomeSource source = WeightedBiomeSource.fromConfig(config, worldSeed, biomes, BiomeDimension.OVERWORLD);
-        Holder<NoiseGeneratorSettings> settings = noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD);
+        Holder<NoiseGeneratorSettings> settings = CalicoTerrainStyles.resolveOverworldSettings(
+                config.terrainStyle(), noiseSettings, noises);
         Holder<DimensionType> dimType = dimensionTypes.getOrThrow(BuiltinDimensionTypes.OVERWORLD);
         return new LevelStem(dimType, new NoiseBasedChunkGenerator(source, settings));
     }
@@ -75,14 +79,17 @@ public final class CalicoWorldPresets {
             long worldSeed) {
         HolderGetter<Biome> biomes = registries.lookupOrThrow(Registries.BIOME);
         HolderGetter<NoiseGeneratorSettings> noiseSettings = registries.lookupOrThrow(Registries.NOISE_SETTINGS);
+        HolderGetter<NormalNoise.NoiseParameters> noises =
+                registries.lookupOrThrow(Registries.NOISE);
         HolderGetter<MultiNoiseBiomeSourceParameterList> multiNoiseLists =
                 registries.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
         HolderGetter<DimensionType> dimensionTypes = registries.lookupOrThrow(Registries.DIMENSION_TYPE);
 
         WeightedBiomeSource overworldSource =
                 WeightedBiomeSource.fromConfig(config, worldSeed, biomes, BiomeDimension.OVERWORLD);
-        ChunkGenerator overworldGen = new NoiseBasedChunkGenerator(
-                overworldSource, noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD));
+        Holder<NoiseGeneratorSettings> overworldNoise = CalicoTerrainStyles.resolveOverworldSettings(
+                config.terrainStyle(), noiseSettings, noises);
+        ChunkGenerator overworldGen = new NoiseBasedChunkGenerator(overworldSource, overworldNoise);
         WorldDimensions result = dimensions.replaceOverworldGenerator(registries, overworldGen);
 
         Map<ResourceKey<LevelStem>, LevelStem> map = new java.util.LinkedHashMap<>(result.dimensions());
@@ -129,8 +136,21 @@ public final class CalicoWorldPresets {
                             noiseSettings.getOrThrow(NoiseGeneratorSettings.NETHER)));
         });
 
-        Calico.LOGGER.info("Calico: applied create-time config to Overworld LevelStem ({} biomes)",
-                overworldSource.entries().size());
+        String noiseKey = overworldNoise.unwrapKey()
+                .map(k -> k.location().toString())
+                .orElseGet(() -> "direct(seaLevel=" + overworldNoise.value().seaLevel()
+                        + ",aquifers=" + overworldNoise.value().isAquifersEnabled() + ")");
+        Calico.LOGGER.info(
+                "Calico: applied create-time config to Overworld LevelStem ({} biomes, terrainStyle={}, noiseSettings={})",
+                overworldSource.entries().size(),
+                config.terrainStyle() == null ? "normal" : config.terrainStyle().serializedName(),
+                noiseKey);
+        var style = config.terrainStyle();
+        if (style != null && style.isCustomTerrain() && overworldNoise.is(NoiseGeneratorSettings.OVERWORLD)) {
+            Calico.LOGGER.error(
+                    "Calico: terrainStyle={} resolve produced OVERWORLD — create path will ignore custom terrain",
+                    style.serializedName());
+        }
         return new WorldDimensions(map);
     }
 
@@ -157,8 +177,10 @@ public final class CalicoWorldPresets {
             HolderGetter<Biome> biomes,
             HolderGetter<DimensionType> dimensionTypes,
             HolderGetter<NoiseGeneratorSettings> noiseSettings,
-            HolderGetter<MultiNoiseBiomeSourceParameterList> multiNoiseLists) {
-        LevelStem overworld = createOverworldStem(config, worldSeed, biomes, dimensionTypes, noiseSettings);
+            HolderGetter<MultiNoiseBiomeSourceParameterList> multiNoiseLists,
+            HolderGetter<NormalNoise.NoiseParameters> noises) {
+        LevelStem overworld = createOverworldStem(
+                config, worldSeed, biomes, dimensionTypes, noiseSettings, noises);
 
         LevelStem nether = WeightedBiomeSource.tryFromConfig(config, worldSeed, biomes, BiomeDimension.NETHER)
                 .map(src -> new LevelStem(
@@ -233,7 +255,9 @@ public final class CalicoWorldPresets {
         net.minecraft.data.DataProvider.Factory<DatapackBuiltinEntriesProvider> factory = output -> new DatapackBuiltinEntriesProvider(
                 output,
                 event.getLookupProvider(),
-                new RegistrySetBuilder().add(Registries.WORLD_PRESET, CalicoWorldPresets::bootstrap),
+                new RegistrySetBuilder()
+                        .add(Registries.NOISE_SETTINGS, CalicoTerrainStyles::bootstrap)
+                        .add(Registries.WORLD_PRESET, CalicoWorldPresets::bootstrap),
                 Set.of(Calico.MOD_ID));
         event.getGenerator().addProvider(event.includeServer(), factory);
     }

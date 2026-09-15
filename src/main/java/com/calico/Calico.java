@@ -33,7 +33,7 @@ public class Calico {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        LOGGER.info("Calico Phase 1 loaded — weighted biome source + world preset hooks ready");
+        LOGGER.info("Calico loaded — weighted biomes + terrain styles (Phase 2) ready");
     }
 
     private void gatherData(GatherDataEvent event) {

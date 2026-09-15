@@ -2,6 +2,7 @@ package com.calico.client.screen;
 
 import java.util.List;
 import com.calico.Calico;
+import com.calico.client.CalicoClient;
 import com.calico.client.data.BiomeCatalog;
 import com.calico.client.data.BiomeEntry;
 import com.calico.client.data.BiomeFilterState;
@@ -11,6 +12,7 @@ import com.calico.client.data.BiomeTagClassifier;
 import com.calico.config.BiomeScale;
 import com.calico.config.CalicoConfigValidation;
 import com.calico.config.CalicoWorldGenConfig;
+import com.calico.config.TerrainStyle;
 import com.calico.fun.FunTabStub;
 import com.calico.worldgen.BiomeDimension;
 import com.calico.worldgen.BiomeRegistryDiscovery;
@@ -34,7 +36,8 @@ import net.neoforged.api.distmarker.OnlyIn;
 
 /**
  * Calico create-world biome picker — vanilla buffet spirit with multi-select.
- * Main chrome stays sparse; climate chips / QoL / presets live in {@link CalicoFiltersScreen}.
+ * Two toolbar rows keep Terrain + selection actions on-screen; climate chips / presets /
+ * random / export-import live in {@link CalicoFiltersScreen}.
  */
 @OnlyIn(Dist.CLIENT)
 public class CalicoCreateWorldScreen extends Screen {
@@ -66,6 +69,8 @@ public class CalicoCreateWorldScreen extends Screen {
     private BiomeTileGridWidget grid;
     private EditBox searchBox;
     private Button createButton;
+    /** Terrain CycleButton — Done reads getValue() so label never desyncs from packed id. */
+    private CycleButton<TerrainStyle> terrainStyleButton;
     private Button resetWeightButton;
     private WeightSlider weightSlider;
     private Component statusMessage = Component.empty();
@@ -114,12 +119,45 @@ public class CalicoCreateWorldScreen extends Screen {
 
         // --- Header: wordmark reserve ---
         int headerBottom = 6 + WORDMARK_DRAW_H;
+        int maxX = this.width - MARGIN;
 
-        // --- Toolbar row: Dimension | Search | Filters… | Biome scale ---
-        int toolbarY = headerBottom + 8;
+        // --- Row 1 (primary): Dimension | Search | Filters… | Clear | Select all ---
+        int row1Y = headerBottom + 8;
         int x = MARGIN;
 
-        int dimW = 120;
+        int dimW = 110;
+        Component filtersLabel = Component.translatable("calico.screen.create.filters");
+        Component clearLabel = Component.translatable("calico.screen.create.qol.clear");
+        Component selectAllLabel = Component.translatable("calico.screen.create.qol.select_all");
+        int filtersW = Math.max(80, this.font.width(filtersLabel) + 16);
+        int clearW = Math.max(56, this.font.width(clearLabel) + 16);
+        int selectAllW = Math.max(72, this.font.width(selectAllLabel) + 16);
+
+        // Search flexes; never place widgets past maxX (GUI scale Auto / 3+)
+        int searchMin = 80;
+        int fixedAfterSearch = filtersW + clearW + selectAllW + GAP * 3;
+        int searchAvail = maxX - (x + dimW + GAP) - fixedAfterSearch;
+        int searchW = Math.max(searchMin, searchAvail);
+        if (searchAvail < searchMin) {
+            // Shrink trailing buttons so Filters/Clear/Select all stay on-screen
+            int overflow = searchMin - Math.max(0, searchAvail);
+            int shrink = Math.min(overflow, Math.max(0, selectAllW - 60));
+            selectAllW -= shrink;
+            overflow -= shrink;
+            shrink = Math.min(overflow, Math.max(0, clearW - 48));
+            clearW -= shrink;
+            overflow -= shrink;
+            shrink = Math.min(overflow, Math.max(0, filtersW - 64));
+            filtersW -= shrink;
+            fixedAfterSearch = filtersW + clearW + selectAllW + GAP * 3;
+            searchAvail = maxX - (x + dimW + GAP) - fixedAfterSearch;
+            // Prefer min width, but never overflow past maxX
+            searchW = Math.max(40, Math.min(searchMin, Math.max(0, searchAvail)));
+            if (searchAvail > searchMin) {
+                searchW = searchAvail;
+            }
+        }
+
         addRenderableWidget(CycleButton.<BiomeDimension>builder(d -> Component.translatable(
                         switch (d) {
                             case OVERWORLD -> "calico.screen.create.tab.overworld";
@@ -131,7 +169,7 @@ public class CalicoCreateWorldScreen extends Screen {
                 .withInitialValue(this.filters.dimensionTab() == BiomeDimension.UNKNOWN
                         ? BiomeDimension.OVERWORLD
                         : this.filters.dimensionTab())
-                .create(x, toolbarY, dimW, BTN_H,
+                .create(x, row1Y, dimW, BTN_H,
                         Component.translatable("calico.screen.create.dimension"),
                         (btn, value) -> {
                             this.filters.setDimensionTab(value);
@@ -139,10 +177,7 @@ public class CalicoCreateWorldScreen extends Screen {
                         }));
         x += dimW + GAP;
 
-        int filtersW = Math.max(80, this.font.width(Component.translatable("calico.screen.create.filters")) + 16);
-        int scaleW = 150;
-        int searchW = Math.max(120, this.width - MARGIN - x - filtersW - scaleW - GAP * 2 - MARGIN);
-        this.searchBox = new EditBox(this.font, x, toolbarY, searchW, BTN_H,
+        this.searchBox = new EditBox(this.font, x, row1Y, searchW, BTN_H,
                 Component.translatable("calico.screen.create.search"));
         this.searchBox.setHint(Component.translatable("calico.screen.create.search.hint"));
         this.searchBox.setResponder(value -> {
@@ -154,9 +189,61 @@ public class CalicoCreateWorldScreen extends Screen {
         addRenderableWidget(this.searchBox);
         x += searchW + GAP;
 
-        addRenderableWidget(Button.builder(Component.translatable("calico.screen.create.filters"), b -> openFilters())
-                .bounds(x, toolbarY, filtersW, BTN_H).build());
-        x += filtersW + GAP;
+        int filtersX = Math.min(x, maxX - filtersW - GAP - clearW - GAP - selectAllW);
+        addRenderableWidget(Button.builder(filtersLabel, b -> openFilters())
+                .bounds(filtersX, row1Y, filtersW, BTN_H).build());
+
+        int clearX = Math.min(filtersX + filtersW + GAP, maxX - clearW - GAP - selectAllW);
+        addRenderableWidget(Button.builder(clearLabel, b -> {
+                    this.selection.clear();
+                    onSelectionChanged();
+                }).bounds(clearX, row1Y, clearW, BTN_H).build());
+
+        int selectAllX = Math.min(clearX + clearW + GAP, maxX - selectAllW);
+        addRenderableWidget(Button.builder(selectAllLabel, b -> {
+                    this.selection.selectAll(this.catalog.filter(this.filters));
+                    onSelectionChanged();
+                }).bounds(selectAllX, row1Y, selectAllW, BTN_H).build());
+
+        // --- Row 2 (obvious): Terrain (prominent, left) | Biome scale ---
+        // NEVER pack Terrain after Scale on a single overflowing row.
+        int row2Y = row1Y + BTN_H + GAP;
+        int terrainAvail = Math.max(120, maxX - MARGIN);
+        int terrainW = Math.max(170, this.font.width(Component.translatable("calico.screen.create.terrain"))
+                + this.font.width(Component.translatable("calico.screen.create.terrain.wedding_cake")) + 28);
+        terrainW = Math.min(Math.max(160, terrainW), terrainAvail);
+        int scaleW = Math.min(130, Math.max(100, terrainAvail));
+
+        int terrainX = MARGIN;
+        int scaleX = terrainX + terrainW + GAP;
+        int scaleY = row2Y;
+        // Wrap Scale under Terrain when narrow so Terrain stays fully on-screen
+        if (scaleX + scaleW > maxX) {
+            scaleX = MARGIN;
+            scaleY = row2Y + BTN_H + GAP;
+        }
+
+        // Locked emit ids via TerrainStyle.serializedName(): normal|sky_islands|islands|
+        // big_islands|mountainous|cave|wedding_cake|ant_hill — never "standard" (alias→normal on parse only).
+        this.terrainStyleButton = CycleButton.<TerrainStyle>builder(v -> Component.translatable(
+                        switch (v) {
+                            case NORMAL -> "calico.screen.create.terrain.normal";
+                            case SKY_ISLANDS -> "calico.screen.create.terrain.sky_islands";
+                            case ISLANDS -> "calico.screen.create.terrain.islands";
+                            case BIG_ISLANDS -> "calico.screen.create.terrain.big_islands";
+                            case MOUNTAINOUS -> "calico.screen.create.terrain.mountainous";
+                            case CAVE -> "calico.screen.create.terrain.cave";
+                            case WEDDING_CAKE -> "calico.screen.create.terrain.wedding_cake";
+                            case ANT_HILL -> "calico.screen.create.terrain.ant_hill";
+                        }))
+                .withValues(TerrainStyle.values())
+                .withInitialValue(this.selection.terrainStyle())
+                .withTooltip(value -> Tooltip.create(Component.translatable(
+                        "calico.screen.create.terrain." + value.serializedName() + ".tooltip")))
+                .create(terrainX, row2Y, terrainW, BTN_H,
+                        Component.translatable("calico.screen.create.terrain"),
+                        (btn, value) -> this.selection.setTerrainStyle(value));
+        addRenderableWidget(this.terrainStyleButton);
 
         addRenderableWidget(CycleButton.<BiomeScale>builder(v -> Component.translatable(
                         switch (v) {
@@ -169,11 +256,11 @@ public class CalicoCreateWorldScreen extends Screen {
                         value.isQuilt()
                                 ? "calico.screen.create.scale.quilt.tooltip"
                                 : "calico.screen.create.scale.normal.tooltip")))
-                .create(x, toolbarY, scaleW, BTN_H,
+                .create(scaleX, scaleY, scaleW, BTN_H,
                         Component.translatable("calico.screen.create.scale"),
                         (btn, value) -> this.selection.setBiomeScale(value)));
 
-        this.listTop = toolbarY + BTN_H + GAP;
+        this.listTop = Math.max(row2Y, scaleY) + BTN_H + GAP;
 
         // Reserve slim frequency strip above footer when a selected biome is focused
         this.showDetailStrip = shouldShowDetailStrip();
@@ -205,12 +292,18 @@ public class CalicoCreateWorldScreen extends Screen {
                 }).bounds(stripX + stripInnerW - 100, this.detailY + 14, 100, BTN_H).build();
         addRenderableWidget(this.resetWeightButton);
 
-        // Footer
+        // Footer — keep Back/Done fully on-screen at high GUI scale
         int footerY = this.height - FOOTER_H;
+        int footerBtnW = Math.min(150, Math.max(80, (this.width - 2 * MARGIN - GAP) / 2));
+        int footerLeft = this.width / 2 - footerBtnW - GAP / 2;
+        int footerRight = this.width / 2 + GAP / 2;
+        // Clamp into margins if the screen is extremely narrow
+        footerLeft = Math.max(MARGIN, footerLeft);
+        footerRight = Math.min(maxX - footerBtnW, Math.max(footerLeft + footerBtnW + GAP, footerRight));
         addRenderableWidget(Button.builder(CommonComponents.GUI_BACK, b -> onClose())
-                .bounds(this.width / 2 - 155, footerY, 150, 20).build());
+                .bounds(footerLeft, footerY, footerBtnW, 20).build());
         this.createButton = Button.builder(Component.translatable("calico.screen.create.done"), b -> onCreate())
-                .bounds(this.width / 2 + 5, footerY, 150, 20).build();
+                .bounds(footerRight, footerY, footerBtnW, 20).build();
         this.createButton.setTooltip(Tooltip.create(Component.translatable("calico.screen.create.gate")));
         addRenderableWidget(this.createButton);
 
@@ -325,6 +418,10 @@ public class CalicoCreateWorldScreen extends Screen {
     }
 
     private void onCreate() {
+        // Force-sync CycleButton → selection before pack (prevents label≠value / stale default).
+        if (this.terrainStyleButton != null) {
+            this.selection.setTerrainStyle(this.terrainStyleButton.getValue());
+        }
         CalicoWorldGenConfig config = this.selection.toConfig();
         if (!CalicoWorldCreationBridge.submit(this.parent, config)) {
             this.gateMessage = Component.translatable("calico.screen.create.gate");
@@ -332,6 +429,17 @@ public class CalicoCreateWorldScreen extends Screen {
             return;
         }
         BiomeSelectionPersistence.save(this.minecraft, config);
+        // Locked snake_case id only (FunTabStub / serializedName) — never "standard".
+        String styleId = FunTabStub.terrainStyleId(config.terrainStyle());
+        // Visible confirm on Create World so bake misses are easy to spot vs UI handoff.
+        CalicoClient.showCreateConfirm(Component.translatable(
+                "calico.screen.create.applied",
+                styleId,
+                config.selectedBiomes().size()));
+        this.statusMessage = Component.translatable(
+                "calico.screen.create.applied",
+                styleId,
+                config.selectedBiomes().size());
         this.minecraft.setScreen(this.parent);
     }
 

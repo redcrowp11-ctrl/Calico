@@ -31,6 +31,18 @@ public final class CalicoWorldCreationBridge {
                 .orElseGet(() -> createWorldScreen.getUiState().getSettings().options().seed());
         createWorldScreen.getUiState().updateDimensions(
                 (registries, dimensions) -> CalicoCreateWorldBridge.apply(registries, dimensions, sanitized, seed));
+        var overworld = createWorldScreen.getUiState().getSettings().selectedDimensions().overworld();
+        String noise = "unknown";
+        if (overworld instanceof net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator ng) {
+            noise = ng.generatorSettings().unwrapKey()
+                    .map(k -> k.location().toString())
+                    .orElse("direct");
+        }
+        com.calico.Calico.LOGGER.info(
+                "Calico: Customize Done applied (terrainStyle={}, biomes={}, noiseSettings={})",
+                sanitized.terrainStyle().serializedName(),
+                sanitized.selectedBiomes().size(),
+                noise);
         return true;
     }
 }
