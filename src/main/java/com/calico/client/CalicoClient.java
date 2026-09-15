@@ -12,6 +12,8 @@ import com.calico.worldgen.CalicoWorldPresets;
 import com.calico.worldgen.WeightedBiomeSource;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.core.Holder;
 import net.minecraft.world.level.chunk.ChunkGenerator;
@@ -38,10 +40,21 @@ public class CalicoClient {
     /** Guard against recursive uiState listener updates when applying LevelStem. */
     private static boolean applyingCreateTimeConfig;
 
+    /** Shown on CreateWorldScreen after Customize Done — proves terrainStyle handoff. */
+    private static Component createConfirmMessage = Component.empty();
+    private static long createConfirmUntilMs;
+
+    public static void showCreateConfirm(Component message) {
+        createConfirmMessage = message == null ? Component.empty() : message;
+        createConfirmUntilMs = System.currentTimeMillis() + 12_000L;
+        Calico.LOGGER.info("Calico: {}", createConfirmMessage.getString());
+    }
+
     public CalicoClient(IEventBus modEventBus, ModContainer container) {
         modEventBus.addListener(this::onClientSetup);
         modEventBus.addListener(this::onRegisterPresetEditors);
         NeoForge.EVENT_BUS.addListener(CalicoClient::onScreenInit);
+        NeoForge.EVENT_BUS.addListener(CalicoClient::onScreenRender);
     }
 
     private void onClientSetup(FMLClientSetupEvent event) {
@@ -159,5 +172,26 @@ public class CalicoClient {
             return true;
         }
         return false;
+    }
+
+    /** Draws Done confirm banner on create-world so terrainStyle handoff is visible. */
+    private static void onScreenRender(ScreenEvent.Render.Post event) {
+        if (!(event.getScreen() instanceof CreateWorldScreen)) {
+            return;
+        }
+        if (createConfirmMessage.getString().isEmpty()) {
+            return;
+        }
+        if (System.currentTimeMillis() > createConfirmUntilMs) {
+            createConfirmMessage = Component.empty();
+            return;
+        }
+        GuiGraphics graphics = event.getGuiGraphics();
+        Minecraft mc = Minecraft.getInstance();
+        int y = 8;
+        int w = mc.font.width(createConfirmMessage);
+        int x = Math.max(8, (event.getScreen().width - w) / 2);
+        graphics.fill(x - 4, y - 2, x + w + 4, y + 12, 0xC0000000);
+        graphics.drawString(mc.font, createConfirmMessage, x, y, 0x88FF88);
     }
 }

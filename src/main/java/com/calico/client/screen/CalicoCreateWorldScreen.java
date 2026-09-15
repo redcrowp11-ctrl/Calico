@@ -2,6 +2,7 @@ package com.calico.client.screen;
 
 import java.util.List;
 import com.calico.Calico;
+import com.calico.client.CalicoClient;
 import com.calico.client.data.BiomeCatalog;
 import com.calico.client.data.BiomeEntry;
 import com.calico.client.data.BiomeFilterState;
@@ -418,6 +419,18 @@ public class CalicoCreateWorldScreen extends Screen {
             return;
         }
         BiomeSelectionPersistence.save(this.minecraft, config);
+        String styleId = config.terrainStyle() == null
+                ? "normal"
+                : config.terrainStyle().serializedName();
+        // Visible confirm on Create World so bake misses are easy to spot vs UI handoff.
+        CalicoClient.showCreateConfirm(Component.translatable(
+                "calico.screen.create.applied",
+                styleId,
+                config.selectedBiomes().size()));
+        this.statusMessage = Component.translatable(
+                "calico.screen.create.applied",
+                styleId,
+                config.selectedBiomes().size());
         this.minecraft.setScreen(this.parent);
     }
 
